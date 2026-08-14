@@ -24,6 +24,7 @@ Usage:
   python3 scripts/test_email_tracker.py --dry    ← show active entries, no writes
 """
 
+from __future__ import annotations
 import difflib, html as _html, json, sys, re
 from pathlib import Path
 from datetime import datetime
@@ -33,7 +34,9 @@ ROOT    = Path(__file__).parent.parent
 TRACKER = ROOT / "data" / "job_tracker.json"
 
 # ── Status pipeline order — never downgrade ───────────────────────────────────
-PIPELINE = ["Shortlisted", "Approved", "Prep Complete", "Applied",
+# "Referral" sits after "Applied" so an incoming "Applied" email never overwrites
+# a manually-set Referral status, but "Under Review" and above still advance it.
+PIPELINE = ["Shortlisted", "Approved", "Prep Complete", "Applied", "Referral",
             "Under Review", "Interview Scheduled", "Assessment",
             "Offer Received", "Rejected", "Withdrawn"]
 
@@ -44,7 +47,7 @@ VALID_STATUSES = {
 
 def pipeline_rank(status):
     try: return PIPELINE.index(status)
-    except: return -1
+    except ValueError: return -1
 
 # ── Claude API email classifier ───────────────────────────────────────────────
 CLASSIFIER_PROMPT = """You are classifying a recruiter email for a job application tracker.
@@ -253,6 +256,14 @@ COMPANY_ALIASES = {
     "j.p. morgan":        "JPMorgan Chase",
     "jpmorgan":           "JPMorgan Chase",
     "jpmorgan chase":     "JPMorgan Chase",
+    # ICE — acronym doesn't follow first-letter initialism (I-C-E ≠ I-ntercontinental-E-xchange)
+    "ice":                "Intercontinental Exchange",
+    "intercontinental exchange": "Intercontinental Exchange",
+    "intercontinental exchange inc": "Intercontinental Exchange",
+    # M&S — ampersand and hyphenated domain both need aliasing
+    "m&s":                "Marks and Spencer",
+    "marks & spencer":    "Marks and Spencer",
+    "marks-and-spencer":  "Marks and Spencer",
     # Recruiters / agencies that email on behalf of companies
     "greenhouse":         None,   # ATS platform — match by role only
     "lever":              None,
@@ -283,7 +294,10 @@ ATS_DOMAINS = {
 def normalise_company(name: str) -> str:
     """Lowercase, strip punctuation, collapse whitespace for comparison."""
     name = name.lower().strip()
-    name = re.sub(r"[&,\.\-\(\)]", " ", name)
+    # Strip TLD suffixes BEFORE replacing dots — prevents "Vio.com" → "vio com"
+    name = re.sub(r"\.(com|co\.uk|co|io|net|org|de|nl|se|ai|tech)$", "", name)
+    # Include en-dash (U+2013) and em-dash (U+2014) — appear in company names like "Emma – The Sleep Company"
+    name = re.sub(r"[&,\.\-\(\)–—]", " ", name)
     name = re.sub(r"\s+", " ", name).strip()
     # Strip common suffixes that vary between sources
     for suffix in [" ltd", " limited", " plc", " inc", " llc",
@@ -304,6 +318,26 @@ GENERIC_TOKENS = frozenset({
     "search", "recruitment", "staffing", "resources", "networks",
 })
 
+# Status priority for sorting candidates — prefer active pipeline entries over historical.
+# Prep Complete and Shortlisted are most likely targets for incoming confirmation emails.
+_STATUS_PRIORITY = {
+    # Most likely to have a new email: just submitted or actively in-flight
+    "Applied":              0, "Referral": 0,
+    "Under Review":         1, "Interview Scheduled": 1, "Assessment": 1,
+    "Offer Received":       2,
+    # Prepped but not yet submitted — email unlikely but possible
+    "Prep Complete":        3,
+    # Pre-submission pipeline — no application sent, emails very unlikely
+    "Approved":             4,
+    "Shortlisted":          5, "Review Needed": 5,
+    # Terminal / archive — always lose to any active entry
+    "Rejected":            90,
+    "Withdrawn":           91,
+    "Stale":               92,
+    "Duplicate":           93,
+    "Auto-Rejected":       94,
+}
+
 
 def company_tokens(name: str) -> set:
     """Return meaningful word tokens from a company name, excluding generic words."""
@@ -317,9 +351,16 @@ def company_tokens(name: str) -> set:
 # if Tier 1 produces candidates, Tier 2 and 3 are never evaluated.
 
 def _company_match_strong(a: str, b: str) -> bool:
-    """Tier 1: exact normalised match or substring in either direction."""
+    """Tier 1: exact normalised match, or whole-word substring (min 5 chars)."""
     an, bn = normalise_company(a), normalise_company(b)
-    return bool(an) and bool(bn) and (an == bn or an in bn or bn in an)
+    if not an or not bn:
+        return False
+    if an == bn:
+        return True
+    shorter, longer = (an, bn) if len(an) <= len(bn) else (bn, an)
+    if len(shorter) >= 5:
+        return bool(re.search(r'\b' + re.escape(shorter) + r'\b', longer))
+    return False
 
 
 def _company_match_fuzzy(a: str, b: str) -> bool:
@@ -352,6 +393,37 @@ def _company_match_token(a: str, b: str) -> bool:
     return bool(a_tok and b_tok and a_tok & b_tok)
 
 
+def _edit_distance(a: str, b: str) -> int:
+    """Levenshtein distance, case-insensitive. Early exit if length diff > 5."""
+    a, b = a.lower().strip(), b.lower().strip()
+    if a == b:
+        return 0
+    if abs(len(a) - len(b)) > 5:
+        return 99
+    m, n = len(a), len(b)
+    dp = list(range(n + 1))
+    for i in range(1, m + 1):
+        prev, dp[0] = dp[0], i
+        for j in range(1, n + 1):
+            temp = dp[j]
+            dp[j] = prev if a[i-1] == b[j-1] else 1 + min(dp[j], dp[j-1], prev)
+            prev = temp
+    return dp[n]
+
+
+def _email_company_matches(a: str, b: str) -> bool:
+    """High-confidence company match: resolve aliases on both sides, then edit distance ≤ 3."""
+    # Raw lookup first — preserves & and - before normalise strips them (e.g. "M&S" key)
+    def _resolve(s: str) -> str:
+        raw_key = s.lower().strip()
+        norm_key = normalise_company(s)
+        canon = COMPANY_ALIASES.get(raw_key) or COMPANY_ALIASES.get(norm_key)
+        return canon if canon else s
+    an = normalise_company(_resolve(a))
+    bn = normalise_company(_resolve(b))
+    return bool(an and bn and _edit_distance(an, bn) <= 3)
+
+
 def companies_match(a: str, b: str) -> bool:
     """
     Robust company matching that handles:
@@ -367,8 +439,13 @@ def companies_match(a: str, b: str) -> bool:
     # Direct normalised match
     if a_norm == b_norm:
         return True
-    # Substring either direction
-    if a_norm in b_norm or b_norm in a_norm:
+    # Whole-word substring, min 5 chars — avoids "on"/"ice" matching longer names
+    shorter_c = a_norm if len(a_norm) <= len(b_norm) else b_norm
+    longer_c  = b_norm if len(a_norm) <= len(b_norm) else a_norm
+    if len(shorter_c) >= 5 and re.search(r'\b' + re.escape(shorter_c) + r'\b', longer_c):
+        return True
+    # Alias-resolved edit distance — keeps Signal A/B consistent with Signal B+
+    if _email_company_matches(a, b):
         return True
 
     # Alias lookup — check if either resolves to same canonical name
@@ -474,8 +551,22 @@ def find_match(tracker_apps, sender_email, sender_domain, subject, body,
     domain_matched = []
     if not is_ats:
         for app in tracker_apps:
-            if companies_match(domain_base, app.get("company", "")):
+            if (companies_match(domain_base, app.get("company", ""))
+                    or companies_match(domain_base, app.get("agency_name") or "")):
                 domain_matched.append(app)
+    else:
+        # For company-branded ATS subdomains (e.g. doodle.teamtailor-mail.com,
+        # company.greenhouse.io), the leading subdomain IS the company name.
+        # Extract and match it even though the base domain is an ATS platform.
+        _generic_subdomains = {"mail", "jobs", "noreply", "notifications", "hire",
+                               "recruiting", "careers", "apply", "no", "auto"}
+        if sender_domain.count(".") >= 2:
+            ats_subdomain = sender_domain.split(".")[0]
+            if ats_subdomain not in _generic_subdomains and len(ats_subdomain) >= 3:
+                for app in tracker_apps:
+                    if (companies_match(ats_subdomain, app.get("company", ""))
+                            or companies_match(ats_subdomain, app.get("agency_name") or "")):
+                        domain_matched.append(app)
 
     # ── Signal B: company name in full email text ─────────────────────────────
     # Skip for ATS senders (LinkedIn, Greenhouse etc.) — their email bodies contain
@@ -491,77 +582,55 @@ def find_match(tracker_apps, sender_email, sender_domain, subject, body,
     # Combine, deduplicate
     all_company_matches = list({a["id"]: a for a in domain_matched + text_matched}.values())
 
-    # ── Signal B+: tiered Claude-extracted company_name matching ─────────────
-    # Priority: exact/substring (Tier 1) > alias/similarity (Tier 2) > token (Tier 3).
-    # A stronger tier gates out weaker tiers entirely — if Tier 1 finds Paragon Alpha,
-    # Tier 3 never runs and "W Talent" (false token match on "talent") is never a candidate.
+    # ── Signal B+: Claude-extracted company_name — full companies_match on both fields ──
+    # Uses the full companies_match (token overlap + alias + similarity) rather than
+    # the stricter _email_company_matches (edit distance ≤ 3) so variations like
+    # "Emma Sleep GmbH" → "Emma – The Sleep Company" are caught via token overlap.
+    # Also checks agency_name so agency-posted roles match when the email names the
+    # agency (e.g. "Hunter Bond") rather than the anonymous client company.
     if company_name_from_claude:
         cn = company_name_from_claude
         existing_ids = {m["id"] for m in all_company_matches}
-
-        # Tier 1: exact / substring — highest confidence
-        tier1 = [a for a in tracker_apps
-                 if a["id"] not in existing_ids and _company_match_strong(cn, a.get("company", ""))]
-        if tier1:
-            all_company_matches = list({a["id"]: a
-                                        for a in all_company_matches + tier1}.values())
-
-        elif not all_company_matches:
-            # Tier 2: alias / initialism / similarity
-            tier2 = [a for a in tracker_apps
-                     if _company_match_fuzzy(cn, a.get("company", ""))]
-            if tier2:
-                all_company_matches = list({a["id"]: a for a in tier2}.values())
-            else:
-                # Tier 3: token overlap (last resort — generic words excluded)
-                tier3 = [a for a in tracker_apps
-                         if _company_match_token(cn, a.get("company", ""))]
-                all_company_matches = list({a["id"]: a for a in tier3}.values())
+        b_plus = [a for a in tracker_apps
+                  if a["id"] not in existing_ids
+                  and (companies_match(cn, a.get("company", ""))
+                       or companies_match(cn, a.get("agency_name") or ""))]
+        all_company_matches = list({a["id"]: a
+                                    for a in all_company_matches + b_plus}.values())
 
     if not all_company_matches:
-        # agency_name fallback — handles anonymised-company roles posted by recruiters.
-        # e.g. email says "Salt" but tracker entry has company="Leading UK retail brand"
-        # with agency_name="Salt". Direct company matching fails; check agency_name instead.
-        if company_name_from_claude:
-            cn_lower = company_name_from_claude.strip().lower()
-            agency_matches = [a for a in tracker_apps
-                              if (a.get("agency_name") or "").strip().lower() == cn_lower]
-            if agency_matches:
-                all_company_matches = agency_matches
-                # fall through to Signal C role disambiguation
-            else:
-                return None, "no_company_match"
-        else:
-            return None, "no_company_match"
+        return None, "no_company_match"
 
-    # ── Signal C: role match ──────────────────────────────────────────────────
-    for app in all_company_matches:
-        # Claude-extracted role title fuzzy match (more reliable than keyword exclusion)
-        if role_title_from_claude:
-            ratio = difflib.SequenceMatcher(
-                None,
-                role_title_from_claude.lower(),
-                app.get("role", "").lower()
-            ).ratio()
-            if ratio >= 0.70:
+    # Sort candidates: Prep Complete first, then Shortlisted/Approved, then Applied etc.
+    # Ensures fresh pipeline entries win over historical ones when role signals are ambiguous.
+    all_company_matches.sort(key=lambda a: _STATUS_PRIORITY.get(a.get("status", ""), 9))
+
+    # ── Signal C: role match (required — no conf=low updates) ────────────────
+    # Both company AND role must match. If role can't be confirmed → unmatched.
+    # Strip trailing parentheticals like "(Munich, hybrid)" or "(Remote)" before
+    # comparing — Claude omits location context from extracted role titles but
+    # tracker stores the full scraped string including those suffixes.
+    if role_title_from_claude:
+        extracted_role = re.sub(r'\s*\([^)]*\)\s*$', '', role_title_from_claude).strip()
+        for app in all_company_matches:
+            tracker_role = re.sub(r'\s*\([^)]*\)\s*$', '', app.get("role", "")).strip()
+            if _edit_distance(extracted_role, tracker_role) <= 3:
                 return app, "high"
-        # Keyword fallback — simpler but catches cases Claude missed
-        role_words = [w for w in app.get("role", "").lower().split() if len(w) > 3]
-        if any(w in full_lower for w in role_words):
-            return app, "high"
 
-    # ── ATS job-ID disambiguation (when role match also ambiguous) ────────────
+    # ── ATS job-ID disambiguation when role signal is ambiguous ──────────────
     if job_reference_id_from_claude and len(all_company_matches) > 1:
         for app in all_company_matches:
             if str(job_reference_id_from_claude) in (app.get("career_page_url") or ""):
                 return app, "high"
 
-    # Single company match without role signal
+    # Single unambiguous company match — return with medium confidence.
+    # Safe: if only 1 active entry for this company, it is almost certainly correct.
+    # Multi-entry companies (e.g. Wise with 6 roles) still require a role signal.
     if len(all_company_matches) == 1:
-        return all_company_matches[0], "low"
+        return all_company_matches[0], "medium"
 
-    # Multiple company matches, no role signal to disambiguate
-    return None, "multiple_matches"
+    # Multiple company matches but no role signal — cannot safely disambiguate.
+    return None, "no_role_match"
 
 
 def update_tracker(app_id, new_status, email_record, tracker):
@@ -689,7 +758,10 @@ def main():
 
         # Log unmatched
         unmatched_path = ROOT / "data" / "unmatched_emails.json"
-        unmatched = json.loads(unmatched_path.read_text())
+        try:
+            unmatched = json.loads(unmatched_path.read_text())
+        except (FileNotFoundError, json.JSONDecodeError):
+            unmatched = {"unmatched_emails": []}
         unmatched["unmatched_emails"].append({
             "logged_date":  datetime.now().strftime("%Y-%m-%d"),
             "sender_email": sender,
@@ -740,7 +812,7 @@ def main():
             print(f"\n  Syncing to Google Sheet...")
             import subprocess
             result = subprocess.run(
-                ["python3", "scripts/sheets_sync.py", "push"],
+                ["python3", "scripts/sheets_sync.py", "push", "--tabs", "apps,archive"],
                 capture_output=True, text=True, cwd=ROOT
             )
             if result.returncode == 0:

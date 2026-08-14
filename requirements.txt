@@ -1,3 +1,9 @@
-gspread>=6.0.0
-google-auth>=2.0.0
-google-auth-httplib2>=0.2.0
+# Pinned to major versions — runs locally on Python 3.9.6 (system) and
+# Python 3.11 in GitHub Actions (.github/workflows/daily_scout.yml).
+# google-auth 3.x will drop Python 3.9 (EOL Oct 2025) — stay on 2.x until the
+# pipeline moves to the 3.12 .venv.
+gspread>=6.0.0,<7
+google-auth>=2.0.0,<3
+google-auth-httplib2>=0.2.0,<1
+reportlab>=4.0.0,<6
+python-dotenv>=1.0.0,<2

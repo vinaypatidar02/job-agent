@@ -67,8 +67,8 @@ FS_SVAL   =  9.02   # sidebar field values
 FS_SITEM  =  7.82   # sidebar list items
 FS_RCHEAD = 13.24   # right-col section headers (teal)
 FS_ROLE   = 10.23   # job role title
-FS_CODATE =  9.02   # company name + date
-FS_BULLET =  7.82   # bullet text
+FS_CODATE =  9.50   # company name + date
+FS_BULLET =  8.50   # bullet text
 FS_CLLBL  = 10.23   # cert name
 FS_CLVAL  =  9.02   # cert provider
 SEC_BAR_H = 25.3    # section bar height
@@ -197,10 +197,11 @@ def check_page(c, y_top, needed=60):
 _PLACEHOLDERS = {"FILL_ME", "FILL_DATE", "TODO", "TBD"}
 
 def _validate_doc(data: dict, kind: str):
-    """Warn loudly if obvious placeholder strings remain in key fields."""
+    """Block rendering if placeholder strings remain in key fields — exit 1 so caller sees the failure."""
     def _has_placeholder(val: str) -> bool:
         return any(p in val.upper() for p in _PLACEHOLDERS)
 
+    errors = []
     field_checks = {
         "resume": ["summary"],
         "cover":  ["date", "recipient", "salutation"],
@@ -208,14 +209,23 @@ def _validate_doc(data: dict, kind: str):
     for field in field_checks.get(kind, []):
         val = str(data.get(field, ""))
         if _has_placeholder(val):
-            print(f"[pdf_renderer] ⚠  WARNING: '{field}' contains placeholder text: {val!r}")
+            errors.append(f"'{field}' contains placeholder text — LLM step incomplete.")
+    if kind == "resume":
+        summary = str(data.get("summary", ""))
+        if "Write exactly" in summary or summary.strip().startswith("S1:"):
+            errors.append("'summary' contains raw LLM prompt — run generate_summaries.py first.")
     if kind == "cover":
         for i, para in enumerate(data.get("paragraphs", [])):
             if _has_placeholder(str(para)):
-                print(f"[pdf_renderer] ⚠  WARNING: paragraphs[{i}] contains placeholder text")
+                errors.append(f"paragraphs[{i}] contains placeholder text — LLM step incomplete.")
         n = len(data.get("paragraphs", []))
         if n < 4:
-            print(f"[pdf_renderer] ⚠  WARNING: cover letter has {n} paragraphs (expected 4)")
+            errors.append(f"cover letter has {n} paragraphs (expected 4).")
+    if errors:
+        print(f"[pdf_renderer] ✗ RENDERING BLOCKED — {len(errors)} unfilled placeholder(s):")
+        for e in errors:
+            print(f"[pdf_renderer]   {e}")
+        import sys; sys.exit(1)
 
 
 # SINGLE-COLUMN RESUME (UK default)
@@ -224,10 +234,11 @@ def _validate_doc(data: dict, kind: str):
 def _build_single_column(data: dict, output_path: str):
     """Full-width single-column A4 resume — UK market default."""
     c = rl_canvas.Canvas(output_path, pagesize=A4)
-    c.setTitle("Vinay Patidar — CV")
-    c.setAuthor("Vinay Patidar")
-    c.setCreator("Vinay Patidar")
-    c.setSubject("Analytics Professional")
+    _name = data.get("name", "Job Applicant")
+    c.setTitle(f"{_name} — CV")
+    c.setAuthor(_name)
+    c.setCreator(_name)
+    c.setSubject("Curriculum Vitae")
 
     LMAR   = 40.0
     RMAR   = 40.0
@@ -378,6 +389,11 @@ def _build_single_column(data: dict, output_path: str):
         _loc = job.get("location", "")
         _co_loc = f"{job['company']}, {_loc}" if _loc else job['company']
         y = sc_para(y, _co_loc, fs=FS_CODATE, italic=True)
+        y += 1
+
+        focus = job.get("focus_areas")
+        if focus:
+            y = sc_para(y, focus, fs=8.0, color=TEAL, italic=True)
         y += 2
 
         # Optional featured link (e.g. published article about this role's work)
@@ -458,10 +474,11 @@ def build_resume(data: dict, output_path: str, layout: str = "single"):
     if layout != "two_column":
         return _build_single_column(data, output_path)
     c = rl_canvas.Canvas(output_path, pagesize=A4)
-    c.setTitle("Vinay Patidar — CV")
-    c.setAuthor("Vinay Patidar")
-    c.setCreator("Vinay Patidar")
-    c.setSubject("Analytics Professional")
+    _name = data.get("name", "Job Applicant")
+    c.setTitle(f"{_name} — CV")
+    c.setAuthor(_name)
+    c.setCreator(_name)
+    c.setSubject("Curriculum Vitae")
     draw_sidebar_bg(c)
 
     # ── LEFT COLUMN ──────────────────────────────────────────────────────────
@@ -566,6 +583,11 @@ def build_resume(data: dict, output_path: str, layout: str = "single"):
         # Company italic below role
         yr = rc_para(c, ROLE_X, yr, f"{job['company']}, {job.get('location','')}",
                      FS_CODATE, DARK, italic=True, tw=ROLE_TW)
+        yr += 1
+
+        focus = job.get("focus_areas")
+        if focus:
+            yr = rc_para(c, ROLE_X, yr, focus, 8.0, TEAL, italic=True, tw=ROLE_TW)
         yr += 2
 
         for bullet in job.get("bullets",[]):
@@ -600,9 +622,10 @@ def _build_single_column_cover_letter(data: dict, output_path: str):
     """Single-column cover letter — matches the single-column resume header exactly.
     ATS-safe: no sidebar, no columns, clean full-width text flow."""
     c = rl_canvas.Canvas(output_path, pagesize=A4)
-    c.setTitle("Vinay Patidar — Cover Letter")
-    c.setAuthor("Vinay Patidar")
-    c.setCreator("Vinay Patidar")
+    _name = data.get("name", "Job Applicant")
+    c.setTitle(f"{_name} — Cover Letter")
+    c.setAuthor(_name)
+    c.setCreator(_name)
     c.setSubject("Cover Letter")
 
     LMAR   = 40.0
@@ -713,9 +736,10 @@ def build_cover_letter(data: dict, output_path: str, layout: str = "single"):
         return
 
     c = rl_canvas.Canvas(output_path, pagesize=A4)
-    c.setTitle("Vinay Patidar — Cover Letter")
-    c.setAuthor("Vinay Patidar")
-    c.setCreator("Vinay Patidar")
+    _name = data.get("name", "Job Applicant")
+    c.setTitle(f"{_name} — Cover Letter")
+    c.setAuthor(_name)
+    c.setCreator(_name)
     c.setSubject("Cover Letter")
     draw_sidebar_bg(c)
 
@@ -797,130 +821,93 @@ def build_cover_letter(data: dict, output_path: str, layout: str = "single"):
 # ─────────────────────────────────────────────────────────────────────────────
 
 SAMPLE_RESUME = {
-    "name": "Vinay Patidar",
-    "title_lines": ["Lead Product, Growth &", "Commercial Analytics Professional"],
+    "name": "Jane Smith",
+    "title_lines": ["Lead Analytics Professional", "Product · Growth · Strategy"],
     "contact": {
-        "email":    "vinay_patidar02@yahoo.com",
-        "phone":    "+91 XXXXX XXXXX",
-        "linkedin": "linkedin.com/in/vinay-patidar-vp02",
-        "github":   "github.com/vinaypatidar02",
-        "address":  "Bengaluru, Karnataka 560035",
+        "email":    "jane.smith@example.com",
+        "phone":    "+1 555 123 4567",
+        "linkedin": "linkedin.com/in/jane-smith-example",
+        "github":   "github.com/janesmith-example",
+        "address":  "Your City, Your Country",
     },
     "core_expertise": [
-        "Product Analytics","Growth Analytics",
-        "Experimentation & A/B Testing",
-        "Pricing & Commercial Optimization",
-        "Customer Lifecycle Analytics",
-        "KPI Strategy & Business Intelligence",
-        "Strategic Decision-Making",
-        "Stakeholder Management","Analytics Transformation",
+        "YOUR_EXPERTISE_1", "YOUR_EXPERTISE_2",
+        "YOUR_EXPERTISE_3", "YOUR_EXPERTISE_4",
+        "YOUR_EXPERTISE_5", "YOUR_EXPERTISE_6",
+        "Strategic Decision-Making", "Stakeholder Management",
     ],
-    "skills": ["SQL","Tableau","Python","Looker Studio","BigQuery","Amazon Redshift"],
+    "skills": ["YOUR_SKILL_1", "YOUR_SKILL_2", "YOUR_SKILL_3", "YOUR_SKILL_4", "YOUR_SKILL_5", "Git / GitHub"],
     "summary": (
-        "Lead Product & Commercial Analytics professional with 8+ years of experience "
-        "driving experimentation, customer growth, strategic decision-making, and pricing "
-        "optimisation across ecommerce and technology businesses. Proven track record of "
-        "building scalable KPI frameworks, leading cross-functional analytics initiatives, "
-        "and delivering measurable business impact. Experienced in partnering with product, "
-        "growth, operations, and leadership teams to solve complex business problems in "
-        "high-growth environments."
+        "Senior professional with 8+ years of experience in [your domain] across [your industries]. "
+        "Proven track record of [key achievement type] and [second key achievement type]. "
+        "Experienced in partnering with [teams] to [outcome] in high-growth environments. "
+        "Brings current hands-on AI automation experience, having built a production agentic pipeline."
     ),
     "work_history": [
         {
-            "company":"Flipkart (Ecommerce)","location":"Bengaluru",
-            "role":"Lead Business Analyst","dates":"2025-04-2026-03",
-            "bullets":[
-                "Led CRM analytics, incrementality testing, and experimentation for customer growth, driving 40% growth in Grocery visits and improved cohort monetisation.",
-                "Developed customer propensity models capturing 70% of potential Grocery customers while targeting only 30% of the user base.",
-                "Built automated KPI frameworks and scalable reporting standards improving decision-making consistency across product and growth teams.",
-                "Managed analysts and drove cross-functional experimentation, behavioural analytics, and commercial modelling to optimise reseller behaviour and pricing elasticity.",
+            "company": "Acme Corp (Technology)",
+            "location": "London",
+            "role": "Lead Analyst",
+            "dates": "2023-01-present",
+            "bullets": [
+                "Led [initiative] driving [X%] improvement in [metric] across [scope].",
+                "Built [system/framework] enabling [outcome] for [stakeholders].",
+                "Managed a team of [N] analysts, driving capability building and delivery.",
             ],
         },
         {
-            "company":"BeepKart (Used 2W)","location":"Bengaluru",
-            "role":"Analytics Manager","dates":"2023-07-2024-11",
-            "featured_link": {
-                "text": "Dynamic Pricing Algorithm — Published by BeepKart COO on Medium",
-                "url":  "https://medium.com/@abhisheksaraf_44597/the-art-and-science-of-dynamic-pricing-how-we-built-an-algorithm-for-450-vehicle-models-d691a09361d2",
-            },
-            "bullets":[
-                "Designed a Dynamic Pricing Algorithm reducing inventory holding from 40 to 25 days through optimised pricing and inventory decisions.",
-                "Drove 30%+ improvement in procurement efficiency through geo-clustering, lead-density optimisation, and resource allocation modelling.",
-                "Led and mentored a team of 5 analysts using Agile delivery practices (Jira/Confluence sprint planning), improving team throughput and delivery predictability across all analytics charters.",
-            ],
-        },
-        {
-            "company":"DeHaat (Agriculture Technology)","location":"Bengaluru",
-            "role":"Lead Business Analyst","dates":"2021-07-2023-07",
-            "bullets":[
-                "Reduced overdue outstanding by 30% through data-driven collections prioritisation using customer risk segmentation.",
-                "Developed customer scoring models improving engagement, targeting, and sales conversion. Led a team of 3 analysts.",
-            ],
-        },
-        {
-            "company":"Quinbay/Coviam Technology","location":"Bengaluru",
-            "role":"Senior Data Analyst","dates":"2020-10-2021-07",
-            "bullets":["Built search conversion tracking pipelines; conducted A/B tests via Firebase to optimise search and conversion."],
-        },
-        {
-            "company":"Coviam Technology (Ecommerce)","location":"Bengaluru",
-            "role":"Data Analyst","dates":"2017-05-2020-09",
-            "bullets":[
-                "Developed 150+ Tableau dashboards and 100+ data marts across 50+ microservices.",
-                "Built an XGBoost delivery prediction model achieving 85% accuracy.",
+            "company": "StartupX (Marketplace)",
+            "location": "Amsterdam",
+            "role": "Senior Analyst",
+            "dates": "2021-03-2022-12",
+            "bullets": [
+                "Designed [model/algorithm] reducing [problem] by [X%] through [approach].",
+                "Built [X] dashboards and automated reporting frameworks across [scope].",
             ],
         },
     ],
-    "education": [{"degree":"Mining Engineering, B.Tech","institution":"IIT (BHU), Varanasi","dates":"2012 – 2016","gpa":"7.67/10"}],
+    "education": [
+        {"degree": "Your Degree, Your Field", "institution": "Your University", "dates": "YYYY – YYYY"}
+    ],
     "certifications": [
-        "Data Science using SAS and R — Analytix Labs",
-        "Managing Big Data with MySQL — Coursera",
-        "Data Visualization with Tableau — Coursera",
-        "Mastering Data Analysis in Excel — Coursera",
-        "Claude 101 — Anthropic Skilljar (2026)",
+        "Your Certification — Issuing Body (YYYY)",
         "Claude Code 101 — Anthropic Skilljar (2026)",
     ],
 }
 
 SAMPLE_COVER = {
-    "name": "Vinay Patidar",
-    "title_lines": ["Lead Product, Growth &", "Commercial Analytics Professional"],
+    "name": "Jane Smith",
+    "title_lines": ["Lead Analytics Professional", "Product · Growth · Strategy"],
     "contact": {
-        "email":    "vinay_patidar02@yahoo.com",
-        "phone":    "+91 XXXXX XXXXX",
-        "linkedin": "linkedin.com/in/vinay-patidar-vp02",
-        "github":   "github.com/vinaypatidar02",
-        "address":  "Bengaluru, Karnataka 560035",
+        "email":    "jane.smith@example.com",
+        "phone":    "+1 555 123 4567",
+        "linkedin": "linkedin.com/in/jane-smith-example",
+        "github":   "github.com/janesmith-example",
+        "address":  "Your City, Your Country",
     },
-    "date":       "London, 2026-06-17",
-    "recipient":  "Monzo Hiring Team",
+    "date":       "London, 2026-01-15",
+    "recipient":  "Example Company Hiring Team",
     "salutation": "Dear Hiring Team,",
     "paragraphs": [
-        "I am delighted to apply for the Analytics Manager role at Monzo. With over 8 years "
-        "of experience across ecommerce and fintech-adjacent businesses, I have led analytics "
-        "initiatives spanning customer growth, CRM experimentation, pricing optimisation, and "
-        "KPI strategy. Monzo's customer-obsessed, data-driven culture is precisely the kind "
-        "of environment where I do my best work.",
+        "I am delighted to apply for the [Role Title] at [Company]. With [X]+ years of "
+        "experience in [your domain] across [your industries], I have led initiatives spanning "
+        "[key area 1], [key area 2], and [key area 3]. [Company]'s [specific mission/product] "
+        "is precisely the kind of environment where I do my best work.",
 
-        "At Flipkart, I led CRM analytics and incrementality testing for Grocery growth — "
-        "developing propensity models that identified 70% of high-potential customers while "
-        "reaching only 30% of the base, and building automated KPI frameworks that gave "
-        "leadership real-time visibility into cohort health and campaign ROI. At BeepKart, "
-        "I designed a Dynamic Pricing Algorithm that reduced inventory holding from 40 to 25 "
-        "days, and led a team of 5 analysts delivering experimentation and strategic insights "
-        "in an Agile delivery model.",
+        "At [Company A], I [key achievement with metric]. At [Company B], I [second key "
+        "achievement with metric], and led a team of [N] delivering [outcome] in an Agile "
+        "delivery model.",
 
-        "Across my career I have consistently worked at the intersection of analytics, product "
-        "strategy, and stakeholder management — mentoring teams, running cross-functional "
-        "experimentation programmes, and translating complex data into decisions that move "
-        "business metrics. I am also actively developing AI fluency through Anthropic's "
-        "Claude Code programme, building agentic automation workflows that extend what "
-        "analytics teams can deliver.",
+        "Across my career I have consistently worked at the intersection of [domain], "
+        "[complementary skill], and stakeholder management — mentoring teams, running "
+        "cross-functional programmes, and translating complex data into decisions that move "
+        "business metrics. Beyond this, I bring current hands-on AI engineering capability — "
+        "having built a production-grade end-to-end agentic automation system using Claude Code, "
+        "MCP servers, and the Anthropic API, fully operational in production.",
 
-        "What excites me most about Monzo is the scale of customer data and the genuine "
-        "opportunity to improve people's financial lives through precision analytics. I would "
-        "welcome the chance to discuss how my background in experimentation, lifecycle "
-        "analytics, and team leadership can contribute to Monzo's next phase of growth. "
+        "What excites me most about [Company] is [specific aspect of their mission or product]. "
+        "I would welcome the chance to discuss how my background in [skill 1], [skill 2], and "
+        "team leadership can contribute to [Company]'s next phase of growth. "
         "Thank you for your time and consideration.",
     ],
     "closing": "Kind regards,",

@@ -1,0 +1,175 @@
+{
+  "_instructions": [
+    "This is THE SINGLE FILE you fill in once to configure the entire pipeline.",
+    "Every script reads from this file — auto_prep.py, validate_prep.py, generate_summaries.py, generate_covers.py.",
+    "Fill every field marked YOUR_... then run: python3 scripts/check_workflow.py",
+    "Fields with '_doc' keys are documentation only — they are NOT read by any script.",
+    "Tip: start with 'contact', 'education', 'experience', and 'core_skills' — those affect every output."
+  ],
+
+  "contact": {
+    "_doc": "Appears in resume header and cover letter closing. Use your professional details.",
+    "name":        "YOUR FULL NAME",
+    "email":       "your.email@example.com",
+    "phone":       "+1 234 567 8900",
+    "linkedin":    "linkedin.com/in/your-profile-id",
+    "github":      "github.com/yourusername",
+    "address":     "Your City, Your Country",
+    "eor_address": "Your Country | Remote (EOR-ready: Deel / Remote.com) | UTC+X aligned"
+  },
+
+  "visa_addresses": {
+    "_doc": "Address line suffix per market for visa-required applications. Remove markets you don't target. If you already have right to work in a market, add it to has_right_to_work.markets instead — that skips the visa framing entirely for those markets.",
+    "uk": "Your Country | Seeking Skilled Worker Visa Sponsorship",
+    "nl": "Your Country | Seeking Kennismigrant Sponsorship",
+    "de": "Your Country | Seeking EU Blue Card Sponsorship",
+    "dk": "Your Country | Seeking Pay Limit Scheme Sponsorship",
+    "ie": "Your Country | Seeking Critical Skills Employment Permit",
+    "se": "Your Country | Seeking Arbetstillstånd Sponsorship",
+    "ae": "Your Country | Seeking UAE Employment Visa Sponsorship"
+  },
+
+  "has_right_to_work": {
+    "_doc": "Markets where you ALREADY have work authorization — no visa sponsorship needed. Use market codes: uk, nl, de, dk, ie, se, ae. Leave [] if you need sponsorship everywhere. EXAMPLES: EU citizen targeting EU markets → add 'nl', 'de', 'ie'. UK ILR holder → add 'uk'. Australian citizen targeting AU → not applicable (no AU market in this pipeline).",
+    "markets": []
+  },
+
+  "education": [
+    {
+      "_doc": "Most recent first. Remove the 'gpa' key entirely if you don't want GPA on your resume.",
+      "degree":      "Your Degree Title, Your Field",
+      "institution": "Your University Name",
+      "dates":       "YYYY – YYYY",
+      "gpa":         "X.X/10"
+    }
+  ],
+
+  "certifications": [
+    "YOUR_MOST_RELEVANT_CERTIFICATION — Issuing Body (YYYY)",
+    "YOUR_SECOND_CERTIFICATION — Issuing Body (YYYY)"
+  ],
+
+  "experience": [
+    {
+      "_doc": "Reverse chronological order (newest first). bank_key MUST EXACTLY match a ## heading in experience_bank.md. max_bullets controls how many bullets auto_prep.py selects per role. focus_areas guides bullet prioritisation — put keywords matching the role's core work.",
+      "company":      "Your Most Recent Company",
+      "location":     "City",
+      "role":         "Your Job Title",
+      "dates":        "YYYY-MM-present",
+      "bank_key":     "Exact heading text from experience_bank.md (e.g. 'Company Name')",
+      "pinned":       false,
+      "max_bullets":  5,
+      "focus_areas":  "keyword1 · keyword2 · keyword3 — drives bullet selection priority"
+    },
+    {
+      "company":      "Your Second Most Recent Company",
+      "location":     "City",
+      "role":         "Your Job Title",
+      "dates":        "YYYY-MM-YYYY-MM",
+      "bank_key":     "Exact heading text from experience_bank.md",
+      "max_bullets":  5,
+      "focus_areas":  "keyword1 · keyword2 · keyword3"
+    }
+  ],
+
+  "core_skills": {
+    "_doc": "Always in Skills section of resume — every application. List your top technical tools, priority order. These appear FIRST in the Skills section before any JD-conditional skills. EXAMPLES (analytics): ['SQL', 'Python', 'Tableau', 'BigQuery']. EXAMPLES (software eng): ['Python', 'Go', 'Kubernetes', 'AWS', 'PostgreSQL']. EXAMPLES (finance): ['Excel', 'Python', 'SQL', 'Bloomberg', 'VBA'].",
+    "skills": ["YOUR_SKILL_1", "YOUR_SKILL_2", "YOUR_SKILL_3", "YOUR_SKILL_4", "YOUR_SKILL_5", "Git / GitHub"]
+  },
+
+  "domains": {
+    "_doc": "Define work domains relevant to YOUR profession. The pipeline detects which domain a JD belongs to from its text, then selects matching bullets and expertise labels from experience_bank.md. Add/remove domain keys freely — each must also appear in headline_by_domain below. The 'general' domain is the catch-all fallback and should always exist.",
+    "primary": {
+      "_doc": "Your main domain — highest bullet selection priority when detected. EXAMPLE (analytics): label='Product Analytics', keywords=['product analytics', 'growth', 'experimentation', 'a/b test']. EXAMPLE (software eng): label='Backend Engineering', keywords=['microservices', 'api', 'distributed systems', 'backend']. EXAMPLE (finance): label='FP&A', keywords=['financial planning', 'budgeting', 'forecasting', 'fp&a'].",
+      "label":    "Your Primary Domain Label (e.g. 'Product Analytics', 'Backend Engineering', 'FP&A')",
+      "keywords": ["keyword1", "keyword2", "keyword3 phrase", "keyword4"]
+    },
+    "secondary": {
+      "_doc": "Second most common domain in your target JDs. Follows same pattern as primary.",
+      "label":    "Your Secondary Domain Label",
+      "keywords": ["keyword5", "keyword6", "keyword7"]
+    },
+    "general": {
+      "_doc": "Catch-all when no specific domain is detected. Use your broadest professional credentials.",
+      "label":    "General / Strategy",
+      "keywords": []
+    }
+  },
+
+  "expertise": {
+    "_doc": "Core Expertise section of the resume. 3 primary specialisms + 2-3 secondary shown per role. 'pinned' items always appear regardless of domain. 'leadership' items added when JD is manager/lead level. EXAMPLES (analytics): primary=['Product Analytics', 'Experimentation & A/B Testing', 'CRM Analytics']. EXAMPLES (software): primary=['Distributed Systems', 'Platform Engineering', 'API Design']. EXAMPLES (finance): primary=['Financial Modelling', 'FP&A', 'Commercial Strategy'].",
+    "primary":    ["Your Primary Expertise 1", "Your Primary Expertise 2", "Your Primary Expertise 3"],
+    "secondary":  ["Your Secondary Expertise 1", "Your Secondary Expertise 2"],
+    "pinned":     ["YOUR_PINNED_EXPERTISE_1", "YOUR_PINNED_EXPERTISE_2"],
+    "leadership": ["Team Leadership", "Strategic Decision-Making"]
+  },
+
+  "headline_by_domain": {
+    "_doc": "Resume headline shown directly under your name. One entry per domain key (must match domain keys above). 'default' = IC/specialist roles. 'leadership' = Manager/Lead/Head roles. First array element is the title; second is the subtitle tagline. EXAMPLE: {\"primary\": {\"default\": [\"Lead Analytics Professional\", \"Product · Growth · Experimentation\"], \"leadership\": [\"Analytics Lead & Manager\", \"Product · Growth · AI\"]}}.",
+    "primary": {
+      "default":    ["YOUR TITLE FOR PRIMARY DOMAIN", "Specialty 1 · Specialty 2"],
+      "leadership": ["YOUR LEADERSHIP TITLE FOR PRIMARY DOMAIN", "Specialty 1 · Leadership · AI"]
+    },
+    "secondary": {
+      "default":    ["YOUR TITLE FOR SECONDARY DOMAIN", "Specialty 3 · Specialty 4"],
+      "leadership": ["YOUR LEADERSHIP TITLE FOR SECONDARY DOMAIN", "Specialty 3 · Leadership"]
+    },
+    "general": {
+      "default":    ["YOUR GENERAL TITLE", "Domain · Strategy · AI"],
+      "leadership": ["YOUR GENERAL LEADERSHIP TITLE", "Domain · Leadership · AI"]
+    }
+  },
+
+  "resume_tags": {
+    "_doc": "Tags used to label bullets in experience_bank.md. Each bullet can carry one or more [tag] markers; the pipeline uses these for domain-matched bullet selection. Must match what you use in experience_bank.md. EXAMPLES (analytics): ['product', 'growth', 'crm', 'pricing', 'experimentation', 'ai', 'leadership', 'bi']. EXAMPLES (software): ['backend', 'infrastructure', 'api', 'performance', 'security', 'leadership']. EXAMPLES (finance): ['fp_and_a', 'modelling', 'reporting', 'commercial', 'risk', 'leadership'].",
+    "tags": ["your_tag_1", "your_tag_2", "your_tag_3", "leadership", "ai"]
+  },
+
+  "profile": {
+    "_doc": "Used in Pass 2 scoring prompt, validation checks, and profile summary generation.",
+    "years_of_experience": 5,
+    "target_roles":        ["Your Target Role 1", "Your Target Role 2", "Your Target Role 3"],
+    "target_seniority":    "Lead/Manager — 5-10 years experience expected",
+
+    "industry_history": {
+      "_doc": "Industries you have ACTUALLY worked in — used in Profile Summary S1 framing. 2-3 industries max. Be honest — the validation suite checks this. EXAMPLES (analytics): ['ecommerce', 'marketplace', 'agri-tech']. EXAMPLES (software): ['fintech', 'SaaS', 'infrastructure']. EXAMPLES (finance): ['investment banking', 'asset management', 'corporate finance'].",
+      "industries": ["YOUR_INDUSTRY_1", "YOUR_INDUSTRY_2"]
+    },
+
+    "verbatim_sentences": {
+      "_doc": "Sentences appended verbatim to the end of every Profile Summary after the LLM-generated sentences. Use for credentials you always want highlighted. Leave 'sentences' as [] to disable. 'investment_sentence' is appended only for finance/investment-domain JDs if non-empty. EXAMPLE sentence: 'Brings current hands-on AI automation experience, having built a production agentic pipeline using [YOUR_TOOL].'",
+      "sentences": [],
+      "investment_sentence": ""
+    },
+
+    "platform_notes": {
+      "_doc": "Per-employer data platform rules — prevents credibility-risk tool mix-ups in cover letters. Format: {\"Company Name\": \"description of platform used\"}. EXAMPLE: {\"Acme Corp\": \"used AWS Redshift — never say BigQuery for this role\", \"StartupX\": \"used GCP BigQuery — never say Redshift\"}. Leave {} if not needed.",
+      "notes": {}
+    },
+
+    "framing_rules": {
+      "_doc": "Special framing instructions for specific employers or career stints. Applied to cover letter and summary generation. Array of plain-English rules. EXAMPLE: [\"Always describe the Singapore stint as '2 years onsite in Singapore during a 5-year tenure' — never as a separate company.\"]. Leave [] if not needed.",
+      "rules": []
+    },
+
+    "required_portfolio_tools": {
+      "_doc": "V1 validation check: tools you've built public/portfolio work with. When a JD mentions these tools, they are validated to appear in your cover letter. Leave [] to skip this check.",
+      "tools": []
+    },
+
+    "excluded_tools": {
+      "_doc": "V2 validation check: tools you've used historically but cannot confidently defend in interviews. Blocked from Skills section, Core Expertise, Profile Summary, and Cover Letter paragraphs. They CAN still appear in work_history bullets (factual historical record). Leave [] to skip. EXAMPLE: ['Google Analytics', 'Firebase', 'Apache Airflow'] — tools used but not interview-ready.",
+      "tools": []
+    },
+
+    "canonical_metrics": {
+      "_doc": "V7 validation check: exact metric strings that must appear unchanged in every resume output. Prevents the LLM from paraphrasing your real numbers into approximate language. Leave [] to skip. EXAMPLE: ['40%', '30%', '85%'] — these exact strings must appear verbatim, never as 'approximately 40%' or 'around a third'.",
+      "metrics": []
+    },
+
+    "industry_whitelist": {
+      "_doc": "V17 validation check: industries you can honestly claim in cover letters. Leave [] to allow any industry reference. EXAMPLE: ['ecommerce', 'marketplace', 'agri-tech', 'automotive'] — cover letter will only reference these, never claim fintech/SaaS/etc. experience you don't have.",
+      "industries": []
+    }
+  }
+}

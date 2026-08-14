@@ -1,0 +1,40 @@
+{
+  "_meta": {
+    "last_updated": null,
+    "platform_statuses": [
+      "Pending",
+      "Registered",
+      "Active",
+      "Inactive"
+    ],
+    "recruiter_statuses": [
+      "Not Contacted",
+      "Messaged",
+      "Replied",
+      "In Progress",
+      "No Response",
+      "Closed"
+    ],
+    "referral_schema": {
+      "_comment": "Each referral links a contact to a specific job application in job_tracker.json",
+      "fields": [
+        "id",
+        "app_id",
+        "company",
+        "role",
+        "market",
+        "contact_name",
+        "contact_role",
+        "contact_linkedin",
+        "reached_out_date",
+        "channel",
+        "status",
+        "response_date",
+        "notes"
+      ]
+    }
+  },
+  "referrals": [],
+  "recruiters": [],
+  "platforms": []
+}

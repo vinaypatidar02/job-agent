@@ -28,6 +28,9 @@ from pathlib import Path
 from datetime import date
 from typing import Optional
 
+sys.path.insert(0, str(Path(__file__).parent))
+from common import extract_job_id_from_url, compute_role_type as _compute_role_type
+
 ROOT         = Path(__file__).parent.parent
 SCORED_PATH  = ROOT / "data" / "pipeline" / "scored_jobs.json"
 TRACKER_PATH = ROOT / "data" / "job_tracker.json"
@@ -83,13 +86,26 @@ for entry in tracker:
     if "matched_entry_id" not in entry:
         entry["matched_entry_id"] = None
         changed = True
+    if "role_type" not in entry:
+        entry["role_type"] = _compute_role_type(
+            bool(entry.get("is_contract", False)),
+            bool(entry.get("is_remote_only", False)),
+        )
+        changed = True
+    if "eor_viability" not in entry:
+        entry["eor_viability"] = None
+        changed = True
     if changed:
         _backfilled += 1
 
 if _backfilled:
     print(f"[write_tracker] Backfilled {_backfilled} existing entries with new columns")
 
-# ── Build dedup index (exact jd_url) for safety — prevents double-run issues ──
+# ── Build dedup indexes for safety — prevents double-run issues ──────────────
+# Priority 1: (job_id, market) — URL tracking params make jd_url match unreliable
+# Priority 2: exact jd_url
+existing_job_id_market = {(str(e["job_id"]), (e.get("market") or "uk").lower())
+                          for e in tracker if e.get("job_id")}
 existing_jd_urls = {e.get("jd_url") for e in tracker if e.get("jd_url")}
 
 # ── Next sequential ID ────────────────────────────────────────────────────────
@@ -169,13 +185,8 @@ def _url_authoritative_job_id(jb: dict) -> Optional[str]:
     URL wins when both exist and differ."""
     stored_id = str(jb.get("job_id") or jb.get("id") or "").strip() or None
     url = (jb.get("job_url") or jb.get("url") or "").strip()
-    m = re.search(r'[/-](\d{9,13})(?:[?/]|$)', url)
-    if m:
-        url_id = m.group(1)
-        if stored_id and url_id != stored_id:
-            return url_id  # URL is authoritative
-        return url_id
-    return stored_id
+    url_id = extract_job_id_from_url(url)  # canonical regex from common.py
+    return url_id if url_id else stored_id
 
 
 # ── Build new entry dict ───────────────────────────────────────────────────────
@@ -223,9 +234,12 @@ def _build_new_entry(app_id: str, status: str, jb: dict, sc: Optional[dict],
         "resume_path":            None,
         "cover_letter_path":      None,
         "emails_received":        [],
-        "notes":                  " | ".join((sc or {}).get("flags", [])) or None,
+        "notes":                  None,
+        "pros":                   "\n".join(f"• {p}" for p in (sc or {}).get("pros", [])) or None,
+        "cons":                   "\n".join(f"• {c}" for c in (sc or {}).get("cons", [])) or None,
         "flags":                  (sc or {}).get("flags", []),
         # New dedup/scoring columns
+        "entry_type":             "Reposted" if match_decision == "new_entry" else "Brand New",
         "match_exists":           jb.get("_match_exists", False),
         "matched_entry_id":       matched_id,          # None unless decision=new_entry
         "score_exists":           score_exists,
@@ -236,6 +250,13 @@ def _build_new_entry(app_id: str, status: str, jb: dict, sc: Optional[dict],
         "adzuna_salary_stated":   jb.get("salary", "") if jb.get("_source") == "adzuna" else "",
         "role_focus":             (sc or {}).get("role_focus", ""),
         "market":                 jb.get("market", "uk"),
+        "role_type":              _compute_role_type(
+                                      bool((sc or {}).get("is_contract", False)),
+                                      bool((sc or {}).get("is_remote_only", False)),
+                                  ),
+        "eor_viability":          (sc or {}).get("eor_viability"),
+        "scrape_position":        jb.get("scrape_position"),
+        "search_keyword":         jb.get("search_keyword"),
     }
 
 
@@ -267,7 +288,34 @@ for entry in scored:
             continue
         # matched_id not found in tracker (e.g. was in auto_rejected) — fall through to new entry
 
-    # ── Safety dedup: skip if jd_url already in tracker (double-run protection) ──
+    # ── Safety dedup (double-run protection): (job_id, market) first, then jd_url ──
+    # "new_entry" bypass is allowed when superseding a TERMINAL entry (auto-reject/rejected).
+    # If an ACTIVE (non-terminal) entry already exists with the same job_id, block even for
+    # "new_entry" — this prevents the repost logic from creating duplicate active entries.
+    incoming_job_id = _url_authoritative_job_id(jb)
+    incoming_market = (jb.get("market") or "uk").lower()
+    _is_new_entry_bypass = match_decision == "new_entry"
+    if incoming_job_id and (incoming_job_id, incoming_market) in existing_job_id_market:
+        # Always block if not a new_entry; for new_entry, block if the existing entry is active
+        if not _is_new_entry_bypass:
+            skipped.append((resolved_co or "?", jb.get("job_title", "?"),
+                            f"job_id {incoming_job_id} ({incoming_market}) already in tracker"))
+            continue
+        # new_entry: check if the existing tracker entry is non-terminal (active)
+        _existing_active = next(
+            (e for e in tracker
+             if str(e.get("job_id") or "") == str(incoming_job_id)
+             and (e.get("market") or "uk").lower() == incoming_market
+             and e.get("status") not in {"Auto-Rejected", "Rejected", "Withdrawn", "Stale",
+                                          "Duplicate", "Stale-Referral"}),
+            None
+        )
+        if _existing_active:
+            skipped.append((resolved_co or "?", jb.get("job_title", "?"),
+                            f"job_id {incoming_job_id} active in tracker as "
+                            f"{_existing_active['id']}/{_existing_active['status']} — "
+                            f"blocked new_entry bypass"))
+            continue
     if jd_url and jd_url in existing_jd_urls and match_decision not in ("new_entry",):
         skipped.append((resolved_co or "?", jb.get("job_title", "?"), "jd_url already in tracker"))
         continue
@@ -282,6 +330,8 @@ for entry in scored:
         match_decision, matched_id,
     )
 
+    if incoming_job_id:
+        existing_job_id_market.add((incoming_job_id, incoming_market))
     if jd_url:
         existing_jd_urls.add(jd_url)
 
@@ -339,6 +389,64 @@ for upg in apify_upgrades:
           f"{existing.get('role','?')}: {fields_str}")
     upgraded.append(matched_id)
 
+# ── Write today's auto-rejected entries to tracker ────────────────────────────
+AUTO_REJ_PATH = ROOT / "data" / "auto_rejected.json"
+ar_raw   = json.loads(AUTO_REJ_PATH.read_text()) if AUTO_REJ_PATH.exists() else {"auto_rejected": []}
+ar_today = [e for e in ar_raw.get("auto_rejected", []) if e.get("scout_run_date") == TODAY]
+
+ar_added: list[dict] = []
+for e in ar_today:
+    jd_url    = (e.get("jd_url") or "").strip()
+    ar_job_id = str(e.get("job_id") or "").strip()
+    ar_market = (e.get("market") or "uk").lower()
+    if ar_job_id and (ar_job_id, ar_market) in existing_job_id_market:
+        continue  # already written by a previous run today
+    if jd_url and jd_url in existing_jd_urls:
+        continue  # already written by a previous run today
+    rejection_reason = e.get("rejection_reason", "")
+    app_id   = f"app_{next_id:03d}"
+    next_id += 1
+    ar_added.append({
+        "id":                  app_id,
+        "source":              {"apify": "Apify", "adzuna": "Adzuna"}.get(
+                                  (e.get("scraper_source") or "").lower(), "job_scout_agent"),
+        "job_id":              str(e.get("job_id") or ""),
+        "company":             e.get("company", ""),
+        "role":                e.get("role", ""),
+        "jd_url":              jd_url or None,
+        "career_page_url":     None,
+        "fit_score":           e.get("fit_score"),
+        "visa_sponsorship_status": None,
+        "salary_stated":       e.get("salary_stated"),
+        "location":            e.get("location"),
+        "posted_date":         e.get("posted_date"),
+        "status":              "Auto-Rejected",
+        "rejection_reason":    rejection_reason,
+        "status_history": [
+            {"status": "Auto-Rejected", "date": TODAY, "source": "job_scout_agent",
+             "note": rejection_reason}
+        ],
+        "resume_path":         None,
+        "cover_letter_path":   None,
+        "applied_date":        None,
+        "tracking_url":        None,
+        "emails_received":     [],
+        "notes":               None,
+        "flags":               [],
+        "entry_type":          "Brand New",
+        "match_exists":        False,
+        "matched_entry_id":    None,
+        "score_exists":        e.get("fit_score") is not None,
+        "latest_scoring_date": TODAY if e.get("fit_score") is not None else None,
+        "market":              e.get("market", "uk"),
+    })
+    if ar_job_id:
+        existing_job_id_market.add((ar_job_id, ar_market))
+    if jd_url:
+        existing_jd_urls.add(jd_url)
+
+print(f"[write_tracker] Auto-Rejected: {len(ar_added)} new entries from today's run")
+
 # ── Write ─────────────────────────────────────────────────────────────────────
 by_status = {}
 for e in added:
@@ -353,17 +461,27 @@ for status_label in ("Shortlisted", "Review Needed", "Stale"):
         mid_str   = f" ← supersedes {e['matched_entry_id']}" if e.get("matched_entry_id") else ""
         print(f"  + {e['id']}: {score_str}{e['company']} — {e['role']} ({status_label}){mid_str}")
 
+if ar_added and not DRY_RUN:
+    print(f"\n[write_tracker] Auto-Rejected entries added:")
+    for e in ar_added:
+        score_str = f"[{e['fit_score']}] " if e.get("fit_score") is not None else "[?] "
+        reason_short = (e.get("rejection_reason") or "")[:60]
+        print(f"  ✗ {e['id']}: {score_str}{e['company']} — {e['role']}")
+        print(f"      Reason: {reason_short}")
+
 if skipped:
     print(f"\n[write_tracker] Skipped:")
     for company, role, reason in skipped:
         print(f"  — {company} / {role}: {reason}")
 
-if not DRY_RUN and (added or updated or upgraded or _backfilled):
-    tracker.extend(added)
+all_new = added + ar_added
+if not DRY_RUN and (all_new or updated or upgraded or _backfilled):
+    tracker.extend(all_new)
     raw["applications"] = tracker
     TRACKER_PATH.write_text(json.dumps(raw, indent=2, ensure_ascii=False))
-    print(f"\n[write_tracker] ✓ Wrote {len(added)} new + {len(updated)} updated"
-          f" + {len(upgraded)} Apify-upgraded (+{_backfilled} backfilled) to job_tracker.json")
+    print(f"\n[write_tracker] ✓ Wrote {len(added)} new + {len(ar_added)} auto-rejected"
+          f" + {len(updated)} updated + {len(upgraded)} Apify-upgraded"
+          f" (+{_backfilled} backfilled) to job_tracker.json")
 elif DRY_RUN:
     print(f"\n[write_tracker] --dry-run: no changes written")
 else:

@@ -17,6 +17,8 @@ Usage:
   Called automatically by run_scout.py after each successful run.
 """
 
+from __future__ import annotations  # PEP 604 unions on Python 3.9
+
 import json, sys, os
 from datetime import datetime, date, timedelta
 from pathlib import Path
@@ -70,7 +72,8 @@ def _fetch_apify_budget() -> dict:
         cycle = d["data"]["usageCycle"]
         services = d["data"]["monthlyServiceUsage"]
         used = sum(v.get("amountAfterVolumeDiscountUsd", 0) for v in services.values())
-        plan_limit = 29.0  # Starter plan
+        plan_limit = 10.0  # Free plan ($5/month) + $5 one-time coupon = $10 this cycle (ends 2026-08-21).
+        # Next cycle (2026-08-22+): update this to 5.0 — base free plan only.
         return {
             "cycle_start":       cycle["startAt"][:10],
             "cycle_end":         cycle["endAt"][:10],
@@ -88,11 +91,12 @@ def _fetch_apify_budget() -> dict:
 # ── GitHub Actions runs ───────────────────────────────────────────────────────
 def _fetch_actions_runs() -> list:
     token = _env("GITHUB_TOKEN")
-    if not token:
+    repo  = _env("GITHUB_REPO", "")  # format: username/repo-name — set in .env
+    if not token or not repo:
         return []
     try:
         req = request.Request(
-            "https://api.github.com/repos/vinaypatidar02/job-automation/actions/runs?per_page=5",
+            f"https://api.github.com/repos/{_env('GITHUB_REPO', '')}/actions/runs?per_page=5",
             headers={"Authorization": f"token {token}", "Accept": "application/vnd.github+json"},
         )
         with request.urlopen(req, timeout=15) as r:
@@ -144,22 +148,38 @@ def _scout_stats_from_tracker(since_date: str) -> dict:
 
 # ── Gap detection ─────────────────────────────────────────────────────────────
 def _hours_since_last_success() -> float | None:
+    # scout_runs.json only gets a record when the pipeline completes in one pass.
+    # A run that crashes mid-pipeline and is finished step-by-step leaves no record,
+    # so also consider Apify cache file mtimes (written at scrape time) — a scrape
+    # happened even if the monitoring step never ran (false MISSED RUN, 2026-07-23).
+    last_dt = None
     path = MONITOR_DIR / "scout_runs.json"
     records = _read(path)
-    if not records:
+    if records:
+        ts = records[-1].get("run_timestamp") or records[-1].get("date", "")
+        try:
+            if "T" in ts:
+                last_dt = datetime.fromisoformat(ts)
+            elif ts:
+                last_dt = datetime.strptime(ts, "%Y-%m-%d")
+        except Exception:
+            pass
+
+    cache_dir = ROOT / "data" / "apify_cache"
+    if cache_dir.exists():
+        # Exclude today's files — this runs at the END of a scout, and the current
+        # run's own cache writes must not count as the "previous" run.
+        today = date.today()
+        mtimes = [f.stat().st_mtime for f in cache_dir.glob("*.json")
+                  if date.fromtimestamp(f.stat().st_mtime) < today]
+        if mtimes:
+            cache_dt = datetime.fromtimestamp(max(mtimes))
+            if last_dt is None or cache_dt > last_dt:
+                last_dt = cache_dt
+
+    if last_dt is None:
         return None
-    last = records[-1]
-    ts = last.get("run_timestamp") or last.get("date", "")
-    if not ts:
-        return None
-    try:
-        if "T" in ts:
-            last_dt = datetime.fromisoformat(ts)
-        else:
-            last_dt = datetime.strptime(ts, "%Y-%m-%d")
-        return round((datetime.now() - last_dt).total_seconds() / 3600, 1)
-    except Exception:
-        return None
+    return round((datetime.now() - last_dt).total_seconds() / 3600, 1)
 
 # ── URL health summary for today ──────────────────────────────────────────────
 def _url_health_today() -> dict:
@@ -169,6 +189,13 @@ def _url_health_today() -> dict:
     today_records = [r for r in records if r.get("date") == today]
     if not today_records:
         return {}
+    # Filter to the latest scout session so same-day multi-market runs don't
+    # inflate "THIS RUN" cost. Records without session_id (legacy) fall back
+    # to all-today behaviour so old data stays readable.
+    sessions = {r.get("session_id", "") for r in today_records if r.get("session_id")}
+    if sessions:
+        latest_session = max(sessions)  # yyyymmdd_HHMMSS — lexicographic = chronological
+        today_records = [r for r in today_records if r.get("session_id") == latest_session]
     items_list = [r["items"] for r in today_records]
     usd_list   = [r["usd"]   for r in today_records]
     zeros = [r["keyword"] for r in today_records if r["items"] == 0]
@@ -239,10 +266,10 @@ def _print_health(budget: dict, url_health: dict, gap_hours, actions_runs: list,
     # Apify budget
     if budget:
         used   = budget.get("used_usd", 0)
-        limit  = budget.get("plan_limit_usd", 29)
+        limit  = budget.get("plan_limit_usd", 10)
         remain = budget.get("remaining_usd", 0)
         pct    = round(used / limit * 100) if limit else 0
-        status = "⚠ LOW" if remain < 5 else "OK"
+        status = "⚠ LOW" if remain < 2 else "OK"
         print(f"  [APIFY BUDGET]  ${used:.2f} / ${limit:.0f} ({pct}%)  {status}")
         print(f"    Remaining: ${remain:.2f}  |  Cycle ends: {budget.get('cycle_end','?')}")
     else:

@@ -1,17 +1,18 @@
 name: Daily Job Scout
 
 on:
-  schedule:
-    - cron: '30 6 * * *'   # 12:00 PM IST daily
-  workflow_dispatch:         # manual run from GitHub UI → Actions tab → Run workflow
+  # Uncomment the schedule line to enable automated daily runs.
+  # schedule:
+  #   - cron: '0 6 * * *'   # Example: 6:00 AM UTC daily. Adjust to your timezone.
+  workflow_dispatch:           # Manual trigger from GitHub UI → Actions tab → Run workflow
 
 permissions:
-  contents: write            # allows git push back to the repo
+  contents: write              # required: allows git push back to the repo
 
 jobs:
   scout:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
 
     steps:
       - name: Checkout repo
@@ -26,14 +27,20 @@ jobs:
         run: pip install -q gspread google-auth google-auth-httplib2 python-dotenv
 
       - name: Create .env
+        # ─────────────────────────────────────────────────────────────────────
+        # Add all secrets in GitHub: repo Settings → Secrets → Actions.
+        # Required: ANTHROPIC_API_KEY, APIFY_TOKEN, YAHOO_EMAIL,
+        #   YAHOO_APP_PASSWORD, GOOGLE_SHEET_ID, GOOGLE_SA_JSON,
+        #   GIT_USER_EMAIL, GIT_USER_NAME
+        # Optional: GITHUB_REPO (for CI monitoring — format: username/repo)
+        # ─────────────────────────────────────────────────────────────────────
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
           YAHOO_EMAIL: ${{ secrets.YAHOO_EMAIL }}
           YAHOO_APP_PASSWORD: ${{ secrets.YAHOO_APP_PASSWORD }}
-          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
-          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
           GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+          GITHUB_REPO: ${{ secrets.GITHUB_REPO }}
         run: |
           printf '%s\n' \
             "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" \
@@ -41,12 +48,8 @@ jobs:
             "APIFY_LINKEDIN_ACTOR=bebity/linkedin-jobs-scraper" \
             "YAHOO_EMAIL=${YAHOO_EMAIL}" \
             "YAHOO_APP_PASSWORD=${YAHOO_APP_PASSWORD}" \
-            "ADZUNA_APP_ID=${ADZUNA_APP_ID}" \
-            "ADZUNA_APP_KEY=${ADZUNA_APP_KEY}" \
             "GOOGLE_SHEET_ID=${GOOGLE_SHEET_ID}" \
-            "JOB_TRACKER_PATH=data/job_tracker.json" \
-            "OUTPUTS_PATH=outputs/applications" \
-            "MASTER_RESUME_PATH=data/master_resume.pdf" \
+            "GITHUB_REPO=${GITHUB_REPO}" \
             > .env
 
       - name: Create Google service account key
@@ -54,26 +57,36 @@ jobs:
           GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
         run: printf '%s' "${GOOGLE_SA_JSON}" > data/google_service_account.json
 
-      - name: Clear caches
+      - name: Clear old Apify cache entries
         run: |
-          mkdir -p data/apify_cache data/adzuna_cache
-          python3 scripts/apify_cache.py clear 2>/dev/null || true
-          rm -f data/adzuna_cache/*.json
+          mkdir -p data/apify_cache
+          python3 scripts/apify_cache.py clear --old 2>/dev/null || true
 
       - name: Pull Sheet edits into tracker
-        run: python3 scripts/sheets_sync.py pull
+        run: python3 scripts/sheets_sync.py pull --tabs apps,archive
 
       - name: Run scout pipeline
+        # ─────────────────────────────────────────────────────────────────────
+        # Change --market to match YOUR configured markets in run_scout.py.
+        # Options: uk | nl | de | dk | ie | ae | se | intl | all
+        # ─────────────────────────────────────────────────────────────────────
         run: |
-          python3 scripts/run_scout.py --market all --source apify --yes
+          python3 scripts/write_tracker.py || true
+          python3 scripts/run_scout.py --market intl --yes
           python3 scripts/write_tracker.py
-          python3 scripts/sheets_sync.py push
+          python3 scripts/sheets_sync.py push --tabs apps,archive
           python3 scripts/scout_analysis.py
 
       - name: Commit and push results
+        env:
+          GIT_USER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
+          GIT_USER_NAME:  ${{ secrets.GIT_USER_NAME }}
         run: |
-          git config user.email "vinay_patidar02@yahoo.com"
-          git config user.name "vinaypatidar02"
-          git add data/job_tracker.json data/auto_rejected.json data/processed_email_ids.json data/monitoring/
-          git diff --cached --quiet || git commit -m "cron: scout $(date +%Y-%m-%d)"
+          git config user.email "${GIT_USER_EMAIL}"
+          git config user.name  "${GIT_USER_NAME}"
+          git add data/job_tracker.json data/auto_rejected.json \
+                  data/processed_email_ids.json data/unmatched_emails.json \
+                  data/jd_text_cache.json data/reinject_jobs.json \
+                  data/monitoring/ data/pipeline/
+          git diff --cached --quiet || git commit -m "scout: $(date +%Y-%m-%d)"
           git push

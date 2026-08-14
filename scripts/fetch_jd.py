@@ -30,6 +30,13 @@ import re
 import sys
 from datetime import date
 from pathlib import Path
+from typing import Optional
+
+
+def _extract_job_id_from_url(url: str) -> str:
+    """Extract the LinkedIn numeric job ID from a job URL."""
+    m = re.search(r"[/-](\d{9,13})(?:[?/]|$)", url or "")
+    return m.group(1) if m else ""
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
@@ -59,7 +66,7 @@ def save_to_jd_cache(job_id: str, company: str, role: str, description: str) -> 
     log(f"Saved JD for job_id={job_id} to jd_text_cache.json")
 
 
-def search_jd_text_cache(job_id: str) -> dict | None:
+def search_jd_text_cache(job_id: str) -> Optional[dict]:
     """Check data/jd_text_cache.json for a manually/live-cached JD."""
     if not JD_TEXT_CACHE.exists():
         return None
@@ -83,8 +90,12 @@ def log(msg: str):
     print(f"[fetch_jd] {msg}", file=sys.stderr)
 
 
-def search_flat_file(path: Path, job_id: str) -> dict | None:
-    """Search a root-level JSON array for a matching job_id."""
+def search_flat_file(path: Path, job_id: str) -> Optional[dict]:
+    """Search a root-level JSON array for a matching job_id.
+
+    Checks both structured fields (job_id / id) and URL-embedded IDs since
+    the Apify actor often leaves id/job_id null in enriched output.
+    """
     if not path.exists():
         return None
     try:
@@ -93,27 +104,46 @@ def search_flat_file(path: Path, job_id: str) -> dict | None:
         if not isinstance(jobs, list):
             return None
         for job in jobs:
-            # check "job_id" (enriched) and "id" (raw Apify output) fields
-            if str(job.get("job_id") or job.get("id") or "") == job_id:
+            # Direct field match
+            direct_id = str(job.get("job_id") or job.get("id") or "")
+            if direct_id and direct_id == job_id:
                 return job
+            # URL-embedded fallback — Apify enriched output often has id="" but
+            # the LinkedIn job ID is embedded in applyUrl / jobUrl / job_url etc.
+            for url_field in ("job_url", "url", "applyUrl", "jobUrl", "link", "apply_url"):
+                url_id = _extract_job_id_from_url(job.get(url_field) or "")
+                if url_id and url_id == job_id:
+                    return job
     except Exception as e:
         log(f"Warning: could not read {path.name}: {e}")
     return None
 
 
-def search_cache_dir(cache_dir: Path, job_id: str, source_label: str) -> dict | None:
-    """Search all .json files in a cache directory for a matching job_id."""
+def search_cache_dir(cache_dir: Path, job_id: str, source_label: str) -> Optional[dict]:
+    """Search all .json files in a cache directory for a matching job_id.
+
+    Handles both structured fields (job_id / id) and URL-embedded IDs
+    (job_url field) since the Apify actor often leaves job_id null.
+    """
     if not cache_dir.exists():
         return None
     for cache_file in sorted(cache_dir.glob("*.json")):
         try:
             with open(cache_file) as f:
                 data = json.load(f)
-            results = data.get("results", [])
+            results = data if isinstance(data, list) else data.get("results", [])
             for job in results:
-                # check "job_id" (enriched) and "id" (raw Apify output) fields
-                if str(job.get("job_id") or job.get("id") or "") == job_id:
+                # Direct field match
+                direct_id = str(job.get("job_id") or job.get("id") or "")
+                if direct_id == job_id:
                     log(f"Hit in {source_label}: {cache_file.name}")
+                    return job
+                # URL-embedded fallback (Apify actor often leaves job_id null)
+                url_id = _extract_job_id_from_url(
+                    job.get("job_url") or job.get("url") or ""
+                )
+                if url_id and url_id == job_id:
+                    log(f"Hit in {source_label} via job_url: {cache_file.name}")
                     return job
         except Exception as e:
             log(f"Warning: could not read {cache_file.name}: {e}")
@@ -130,7 +160,7 @@ def build_result(source: str, job: dict) -> dict:
     }
 
 
-def search_manual_jobs(job_id: str) -> dict | None:
+def search_manual_jobs(job_id: str) -> Optional[dict]:
     """Fuzzy-match by company+role from tracker → description in manual_jobs_input.json."""
     if not MANUAL_JOBS_PATH.exists():
         return None
@@ -218,6 +248,31 @@ def main():
         return
 
     log(f"Looking up job_id={job_id}")
+
+    # Pre-step: if job_id is a tracker internal ID (e.g. app_3944), resolve to the
+    # LinkedIn numeric ID from the tracker entry. Also auto-populates jd_url from tracker
+    # if the caller didn't pass --jd_url, so step 5.5 works without a CLI jd_url arg.
+    if not re.fullmatch(r"\d{9,13}", job_id):
+        if TRACKER_PATH.exists():
+            try:
+                tracker_data = json.loads(TRACKER_PATH.read_text())
+                for e in tracker_data.get("applications", []):
+                    if str(e.get("id", "")) == job_id:
+                        stored_jid = str(e.get("job_id") or "")
+                        tracker_jd_url = e.get("jd_url") or ""
+                        linkedin_id = (
+                            stored_jid if re.fullmatch(r"\d{9,13}", stored_jid)
+                            else _extract_job_id_from_url(tracker_jd_url)
+                        )
+                        if linkedin_id:
+                            log(f"Resolved tracker ID {job_id} → LinkedIn ID {linkedin_id}")
+                            job_id = linkedin_id
+                        if not args.jd_url and tracker_jd_url:
+                            args.jd_url = tracker_jd_url
+                            log(f"Auto-populated jd_url from tracker: {tracker_jd_url[:80]}")
+                        break
+            except Exception as exc:
+                log(f"Warning: tracker ID resolution failed: {exc}")
 
     # 0. jd_text_cache.json (live-fetched / manually saved)
     job = search_jd_text_cache(job_id)

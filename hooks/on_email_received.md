@@ -64,7 +64,7 @@
 #         T3 (status anomalies), T4 (classifier spot-check)
 # Cost: zero Claude API calls.
 #
-# IF exit code 0: log "✓ Track eval passed" and proceed to sheets_sync.py push.
+# IF exit code 0: log "✓ Track eval passed" and proceed to sheets_sync.py push --tabs apps,archive.
 #
 # IF exit code 1 or 2 (issues found):
 #
@@ -87,7 +87,7 @@
 #          to matching logic — all in scripts/gmail_backfill.py.
 #       4. After applying: run python3 scripts/check_workflow.py --quick
 #
-#   Proceed to sheets_sync.py push after both parts are done.
+#   Proceed to sheets_sync.py push --tabs apps,archive after both parts are done.
 #
 # T4 spot-check is informational only — never blocks the run.
 # If a classification looks wrong in T4, treat it as a systemic fix:

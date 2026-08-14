@@ -42,34 +42,47 @@ ATS_DOMAINS = (
     "hackajob.com",
 )
 
-# Title blocklist — 100%-certain non-target roles that appear in the generic
-# UK data/analytics feed the actor returns. Inverted approach (vs Adzuna's allowlist)
-# to avoid false negatives: only block titles we are absolutely sure are irrelevant.
-# Validated: 13/40 blocked, 0 false negatives on 40-job Data Analytics Manager cache.
-_TITLE_BLOCKLIST = {
-    "data scientist", "data science",      # Data Scientist, Data Science Lead/Manager
-    "data engineer",                        # Data Engineer, Lead Data Engineer
+# ═══════════════════════════════════════════════════════════════
+# USER CONFIGURATION — Title Blocklist
+# Titles containing any of these strings are rejected before Pass 1 scoring.
+# Use for titles that are 100% certain to be irrelevant to YOUR role.
+# This saves Pass 2 Claude API cost — only block if you are sure.
+# EXAMPLES (analytics): "data engineer", "data scientist", "data architect", "governance"
+# EXAMPLES (software):  "qa engineer", "scrum master", "project manager", "business analyst"
+# EXAMPLES (finance):   "tax specialist", "payroll", "accounts payable", "bookkeeper"
+# Add your own below. Lower-case strings, substring match on title.
+# ═══════════════════════════════════════════════════════════════
+_TITLE_BLOCKLIST: set[str] = {
+    # Add titles that are definitively NOT your target roles.
+    # Example entries (analytics defaults — replace with your profession's noise):
+    "data scientist", "data science",
+    "data engineer",
     "database manager", "database administrator",
-    "warehousing engineer",                 # Lead Data Warehousing Engineer
-    "game analyst",                         # Senior Game Analyst
-    "data architect", "data governance",    # Data Architect, Data Governance Manager
-    "data architecture",                    # Senior Manager - Data Architecture
-    "governance",                           # Data & AI Governance Manager (words non-adjacent)
+    "data platform engineer",
+    "data architect", "data governance",
+    "data architecture",
+    "governance",
+    "servicenow",
+    "dynamics",
+    "netsuite",
+    "project controls",
+    "commercial finance",
+    "actuarial",
+    "regulatory reporting",
+    "vessel",
+    "game analyst",
 }
 
 def _title_is_blocked(title: str) -> bool:
     t = title.lower()
     return any(bad in t for bad in _TITLE_BLOCKLIST)
 
-# Per-label extra blocklist — applied after global blocklist for specific search labels.
-# LBA keyword attracts Product Owner/Scrum noise not caught by global list.
-# Space-prefix prevents blocking hybrid titles like "Analytics Product Owner".
+# Per-label extra blocklist — applied after global blocklist for specific search keyword labels.
+# Use when a particular keyword search attracts noise not blocked globally.
+# Space-prefix on values prevents blocking hybrid titles (e.g. " product owner" won't block "Analytics Product Owner").
+# EXAMPLE: {"Lead Business Analyst": {" product owner", "scrum master", "salesforce developer"}}
 _PER_LABEL_BLOCKLIST: dict[str, set[str]] = {
-    "Lead Business Analyst": {
-        " product owner",       # Technical/Digital/Marketing Product Owner
-        "salesforce developer", # Salesforce Developer / Architect
-        "scrum master",         # Scrum Master / Agile Coach
-    },
+    # Add per-keyword noise patterns here if specific searches return irrelevant titles.
 }
 
 def _title_is_blocked_for_label(title: str, label: str) -> bool:
@@ -86,9 +99,24 @@ def _market_from_label(label: str) -> str:
         return "nl"
     if label.startswith("SE "):
         return "se"
+    if label.startswith("DE "):
+        return "de"
+    if label.startswith("DK "):
+        return "dk"
+    if label.startswith("IE "):
+        return "ie"
     return "uk"
 
-def _record_url_health(label: str, url: str, run_id: str, items: int, usd: float):
+import threading
+_URL_HEALTH_LOCK = threading.Lock()  # url_health.json is read-modify-write; get_batch is parallel
+
+def _record_url_health(label: str, url: str, run_id: str, items: int, usd: float,
+                       session_id: str = ""):
+    with _URL_HEALTH_LOCK:
+        _record_url_health_unlocked(label, url, run_id, items, usd, session_id)
+
+def _record_url_health_unlocked(label: str, url: str, run_id: str, items: int, usd: float,
+                                session_id: str = ""):
     path = MONITOR_DIR / "url_health.json"
     records = []
     if path.exists():
@@ -97,12 +125,13 @@ def _record_url_health(label: str, url: str, run_id: str, items: int, usd: float
         except Exception:
             pass
     records.append({
-        "date":    date.today().isoformat(),
-        "keyword": label,
-        "market":  _market_from_label(label),
-        "run_id":  run_id,
-        "items":   items,
-        "usd":     round(usd, 4),
+        "date":       date.today().isoformat(),
+        "keyword":    label,
+        "market":     _market_from_label(label),
+        "run_id":     run_id,
+        "session_id": session_id,
+        "items":      items,
+        "usd":        round(usd, 4),
     })
     path.write_text(json.dumps(records, indent=2))
 
@@ -131,11 +160,10 @@ def read_cache(label: str, url: str) -> Optional[list]:
     try:
         cached    = json.loads(path.read_text())
         fetched   = datetime.fromisoformat(cached["fetched_at"])
-        age_hours = (datetime.now() - fetched).total_seconds() / 3600
-        if age_hours >= CACHE_TTL:
-            print(f"  [cache] STALE  {label} ({age_hours:.1f}h old) — re-scraping")
+        if fetched.date() < datetime.now().date():
+            print(f"  [cache] STALE  {label} (from {fetched.date()}) — re-scraping")
             return None
-        print(f"  [cache] HIT    {label} ({age_hours:.1f}h old, {cached.get('count',0)} jobs)")
+        print(f"  [cache] HIT    {label} (fetched {fetched.strftime('%H:%M')}, {cached.get('count',0)} jobs)")
         return cached["results"]
     except Exception:
         return None
@@ -215,11 +243,14 @@ def _normalize(item: dict) -> dict:
 
 # ── Apify API call ────────────────────────────────────────────────────────────
 def call_apify_url(url: str, max_jobs: int = DEFAULT_MAX_JOBS,
-                   token: str = None) -> list:
+                   token: str = None, meta: dict = None) -> list:
     """
     Call curious_coder/linkedin-jobs-scraper with a pre-filtered LinkedIn URL.
     Polls until run completes, returns normalised list of job dicts.
     Cost: $1.00 / 1,000 results ($0.001/job).
+    meta: optional dict populated with run_id/run_usd/items — thread-safe channel
+    for URL health recording (function attributes are kept for compat but are
+    unreliable when get_batch fetches URLs in parallel).
     """
     if not token:
         token = load_token()
@@ -232,11 +263,31 @@ def call_apify_url(url: str, max_jobs: int = DEFAULT_MAX_JOBS,
     }
 
     def api(method, path, body=None):
+        # Retry transient failures with backoff. GETs are idempotent → retry on any
+        # network error or 5xx. POSTs (run start) are billed — retry ONLY on
+        # connection-level URLError (request never reached Apify), never on a
+        # response error, to avoid starting duplicate paid runs.
         endpoint = f"{API_BASE}{path}"
         data = json.dumps(body).encode() if body else None
-        req  = request.Request(endpoint, data=data, headers=headers, method=method)
-        with request.urlopen(req, timeout=60) as r:
-            return json.loads(r.read())
+        last_err = None
+        for attempt in range(3):
+            if attempt:
+                wait = 2 ** attempt  # 2s, 4s
+                print(f"  [apify] Transient error, retry {attempt}/2 in {wait}s: {last_err}")
+                time.sleep(wait)
+            req = request.Request(endpoint, data=data, headers=headers, method=method)
+            try:
+                with request.urlopen(req, timeout=60) as r:
+                    return json.loads(r.read())
+            except error.HTTPError as e:
+                if method == "GET" and e.code >= 500:
+                    last_err = f"HTTP {e.code}"
+                    continue
+                raise
+            except error.URLError as e:
+                last_err = e.reason
+                continue
+        raise RuntimeError(f"Apify API {method} {path} failed after 3 attempts: {last_err}")
 
     clamped = max(10, max_jobs)  # actor requires count >= 10
     actor_input = {"urls": [url], "count": clamped}  # plain strings, not objects
@@ -249,8 +300,8 @@ def call_apify_url(url: str, max_jobs: int = DEFAULT_MAX_JOBS,
     except error.HTTPError as e:
         raise RuntimeError(f"Apify run start failed: HTTP {e.code} — {e.read().decode()[:200]}")
 
-    # Poll for completion (max ~3 min)
-    for attempt in range(36):
+    # Poll for completion (max ~8 min)
+    for attempt in range(96):
         time.sleep(5)
         try:
             status_resp = api("GET", f"/actor-runs/{run_id}")
@@ -279,6 +330,8 @@ def call_apify_url(url: str, max_jobs: int = DEFAULT_MAX_JOBS,
     call_apify_url._last_run_id  = run_id
     call_apify_url._last_run_usd = run_usd
     call_apify_url._last_items   = len(items)
+    if meta is not None:
+        meta.update({"run_id": run_id, "run_usd": run_usd, "items": len(items)})
 
     # Retry once if 0 results — handles transient LinkedIn/Apify interruptions.
     # Only this URL is retried; other keywords are unaffected.
@@ -294,7 +347,7 @@ def call_apify_url(url: str, max_jobs: int = DEFAULT_MAX_JOBS,
 
         status2 = "UNKNOWN"
         status_resp2 = {}
-        for attempt in range(36):
+        for attempt in range(96):
             time.sleep(5)
             try:
                 status_resp2 = api("GET", f"/actor-runs/{run_id2}")
@@ -332,6 +385,9 @@ class CachedScraper:
     def __init__(self, token: str = None):
         self.token = token or load_token()
         self.stats = {"cache_hits": 0, "apify_calls": 0, "total_jobs": 0}
+        # Unique ID for this scout invocation — stamps url_health records so
+        # monitor_scout can isolate THIS run's cost from earlier same-day runs.
+        self.session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     def get(self, label: str, url: str, max_jobs: int = DEFAULT_MAX_JOBS) -> list:
         cached = read_cache(label, url)
@@ -340,7 +396,8 @@ class CachedScraper:
             self.stats["total_jobs"] += len(cached)
             return cached
         self.stats["apify_calls"] += 1
-        results = call_apify_url(url, max_jobs, self.token)
+        meta: dict = {}
+        results = call_apify_url(url, max_jobs, self.token, meta=meta)
         write_cache(label, url, results, max_jobs)
         self.stats["total_jobs"] += len(results)
         # Record URL health for live calls (not cache hits)
@@ -348,9 +405,10 @@ class CachedScraper:
             _record_url_health(
                 label,
                 url,
-                getattr(call_apify_url, "_last_run_id", ""),
-                getattr(call_apify_url, "_last_items", len(results)),
-                getattr(call_apify_url, "_last_run_usd", len(results) * 0.001),
+                meta.get("run_id", ""),
+                meta.get("items", len(results)),
+                meta.get("run_usd", len(results) * 0.001),
+                session_id=self.session_id,
             )
         except Exception:
             pass  # monitoring is non-critical
@@ -363,9 +421,8 @@ class CachedScraper:
                   [(label, url, per_url_max), ...] 3-tuples (per-URL cap overrides max_jobs)
         max_jobs: fallback cap per URL when 2-tuples are used (default 100)
         """
-        seen_urls = set()
-        combined  = []
-        blocked   = 0
+        # Normalise entries to (label, url, entry_max)
+        norm = []
         for entry in searches:
             if len(entry) == 3:
                 label, url, entry_max = entry
@@ -373,9 +430,24 @@ class CachedScraper:
             else:
                 label, url = entry
                 entry_max = max_jobs
-            results = self.get(label, url, entry_max)
+            norm.append((label, url, entry_max))
+
+        # Fetch all URLs in parallel — each Apify run polls for minutes, so this
+        # cuts scout wall-time ~4×. Results are processed in original order below
+        # so dedup stays deterministic. Cache hits return instantly either way.
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=min(4, max(1, len(norm)))) as pool:
+            fetched = list(pool.map(lambda e: self.get(e[0], e[1], e[2]), norm))
+
+        seen_urls = set()
+        combined  = []
+        blocked   = 0
+        for (label, url, entry_max), results in zip(norm, fetched):
             if len(results) >= entry_max:
                 print(f"  ⚠  [{label}] Hit cap ({len(results)}/{entry_max}) — some jobs may be unseen")
+            for pos, job in enumerate(results, 1):
+                job["scrape_position"] = pos
+                job["search_keyword"]  = label
             for job in results:
                 if (_title_is_blocked(job.get("job_title", ""))
                         or _title_is_blocked_for_label(job.get("job_title", ""), label)):
@@ -409,9 +481,10 @@ def cli_status():
     for f in files:
         try:
             d         = json.loads(f.read_text())
-            age       = (datetime.now() - datetime.fromisoformat(d["fetched_at"])).total_seconds() / 3600
-            status    = "✓ fresh" if age < CACHE_TTL else "✗ stale"
-            label     = d.get("label") or d.get("keyword", "?")
+            fetched_dt = datetime.fromisoformat(d["fetched_at"])
+            age        = (datetime.now() - fetched_dt).total_seconds() / 3600
+            status     = "✓ fresh" if fetched_dt.date() >= datetime.now().date() else "✗ stale"
+            label      = d.get("label") or d.get("keyword", "?")
             print(f"  {f.name:<45} {label:<30} {d.get('count',0):>5} {age:>6.1f}h {status}")
         except Exception as e:
             print(f"  {f.name:<45} ERROR: {e}")
@@ -423,9 +496,9 @@ def cli_clear(old_only=False):
     for f in files:
         if old_only:
             try:
-                d   = json.loads(f.read_text())
-                age = (datetime.now() - datetime.fromisoformat(d["fetched_at"])).total_seconds() / 3600
-                if age < CACHE_TTL:
+                d            = json.loads(f.read_text())
+                fetched_date = datetime.fromisoformat(d["fetched_at"]).date()
+                if fetched_date >= datetime.now().date():   # today → keep
                     continue
             except Exception:
                 pass

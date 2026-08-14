@@ -1,14 +1,64 @@
-# Private state layer — never commit
-data/*
-!data/README.md
-outputs/
+# ─────────────────────────────────────────────────────────────
+# SECRETS — never commit any of these
+# ─────────────────────────────────────────────────────────────
 .env
-.env.*
-*.pdf
-data/prep_tmp/
+*.env
 data/google_service_account.json
 
-# Python
+# ─────────────────────────────────────────────────────────────
+# CLAUDE CODE — local session state (session-specific, personal)
+# ─────────────────────────────────────────────────────────────
+.claude/settings.local.json
+
+# ─────────────────────────────────────────────────────────────
+# RESUME SOURCE FILES — personal data, keep local only
+# ─────────────────────────────────────────────────────────────
+data/resumes/
+
+# ─────────────────────────────────────────────────────────────
+# SCRAPE & ENRICHMENT OUTPUTS — intermediate working files
+# ─────────────────────────────────────────────────────────────
+data/test_scrape_output.json
+data/enriched_scrape_output.json
+data/apify_cache/
+data/adzuna_cache/
+data/pipeline/raw_scrape_output.json
+data/prep_tmp/
+
+# ─────────────────────────────────────────────────────────────
+# GENERATED APPLICATION OUTPUTS — large binary files
+# ─────────────────────────────────────────────────────────────
+outputs/
+
+# ─────────────────────────────────────────────────────────────
+# PYTHON
+# ─────────────────────────────────────────────────────────────
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+
+# ─────────────────────────────────────────────────────────────
+# NODE (Apify MCP server pulled via npx)
+# ─────────────────────────────────────────────────────────────
+node_modules/
+.npm/
+
+# ─────────────────────────────────────────────────────────────
+# MACOS
+# ─────────────────────────────────────────────────────────────
 .DS_Store
+.AppleDouble
+.LSOverride
+
+# ─────────────────────────────────────────────────────────────
+# EDITORS
+# ─────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo

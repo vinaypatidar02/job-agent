@@ -72,12 +72,22 @@
 #    Valid statuses: Applied, Under Review, Interview Scheduled,
 #    Assessment, Offer Received, Rejected.
 #
+#    REFERRAL FLOW SPECIAL HANDLING:
+#    If current status is "Reached-Out" or "Followup" and email says
+#    "application received" / "thank you for applying" → set to "Referred"
+#    (NOT "Applied" — preserve the referral-channel tracking).
+#    If current status is "Referred" and email says "under review" etc. →
+#    advance normally (Under Review / Interview Scheduled / etc.).
+#    NEVER auto-advance "Reached-Out" or "Followup" to anything other than
+#    "Referred" — the Followup→Stale-Referral advance is handled only by
+#    referral_tracker.py based on time elapsed.
+#
 #    Pipeline order for "do not downgrade" check (left = earlier, right = later):
-#      Shortlisted < Review Needed < Stale < Approved < Prep Complete
-#      < Applied < Under Review < Interview Scheduled < Assessment < Offer Received
+#      Applied < Under Review < Interview Scheduled < Assessment < Offer Received
+#    Referral rank = same as Applied (3). Reached-Out and Followup rank = 2
+#    (between Prep Complete and Applied — email can advance them to Referred).
 #    Only update if new status is the same stage or later than current status.
-#    "Applied" is AFTER "Prep Complete" — always allow this transition.
-#    Rejected and Withdrawn are terminal — never overwrite with pipeline statuses.
+#    Rejected and Withdrawn and Stale-Referral are terminal — never overwrite.
 #    If the email is clearly newer (e.g. a re-application or corrected status),
 #    override even if it appears to be a downgrade.
 #
@@ -97,6 +107,8 @@
 #    - tracking_url       ← extracted_url (if not null)
 #    - status_history[]   ← append { status, date, source: "tracker_agent" }
 #    - emails_received[]  ← append email_record
+#    PRESERVE — never overwrite or null these fields during status-only updates:
+#      role_type, is_contract, eor_viability
 #
 # d. If low-confidence match, add to flags[]: "Low-confidence email match"
 
@@ -118,6 +130,6 @@
 # Log: "[tracker] ✓ Updated [Company] / [Role] → [new status]"
 
 # ── STEP 6 — SYNC TO GOOGLE SHEETS ───────────────────────────
-# Run: python3 scripts/sheets_sync.py push
+# Run: python3 scripts/sheets_sync.py push --tabs apps,archive
 # Ensures the Sheet reflects the new status immediately.
 # Log: "[tracker] Google Sheet synced"

@@ -1,78 +1,133 @@
-# Claude Workflow Automation — an agentic job-search pipeline
+# Claude Workflow Automation — AI-Powered Job Search Pipeline
 
-A production system that runs an international job search end-to-end: it scrapes postings across four markets daily, scores every role against my profile with a two-pass LLM architecture, generates a tailored CV and cover letter as polished PDFs for each approved role, reads my inbox to track application outcomes, and syncs everything to a Google Sheet that acts as the human approval layer.
+> **CONVERSION NOTICE:** This library was converted from a personal analytics job search pipeline
+> into a general-purpose tool. All personal data has been removed. You may occasionally find
+> analytics-specific references — update them to match your profession.
+> Before going live: complete CONFIGURE_CHECKLIST.md, run `check_workflow.py`, and do a dry run.
 
-Built and operated in production for my own search: **8,400+ roles evaluated, 140+ applications prepped and tracked**, at a marginal cost of roughly a tenth of a cent per scored job.
+A production-grade, fully autonomous job search pipeline built on Claude Code, Apify, and
+the Anthropic API. Originally built as a personal tool, open-sourced for any job seeker in
+any profession.
 
-**Stack:** Claude Code · Anthropic API · MCP servers · Python · reportlab · Google Sheets API · IMAP · GitHub Actions
+## What it does
 
----
+- Scrapes LinkedIn jobs daily via Apify across 7 markets (UK, NL, DE, DK, IE, SE, UAE)
+- Scores every job in two passes: Python rules (free) then Claude Haiku batch API
+- Generates tailored resumes and cover letters as ATS-safe PDFs
+- Tracks application status automatically from email replies
+- Syncs everything to Google Sheets as a human-readable dashboard
+- Manages referral outreach: drafts LinkedIn messages and tracks contact responses
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-    subgraph SCOUT["1 · Scout (daily, GitHub Actions)"]
-        A[Job sources<br/>UK · NL · DE · SE] --> B[24h scrape cache]
-        B --> C["Pass 1 — rule gates<br/>title tier · posting age · language<br/>sponsor registers · dedup (4 signals)"]
-        C --> D["Pass 2 — Claude scoring<br/>0–100 fit rubric · hard overrides"]
-    end
-
-    subgraph STATE["2 · State & human approval"]
-        D --> E[job_tracker.json<br/>source of truth]
-        E <-->|bidirectional sync| F[Google Sheet<br/>human approves + adds ATS URL]
-    end
-
-    subgraph PREP["3 · Application prep"]
-        F --> G["Domain detection<br/>product / crm / pricing / bi / general"]
-        G --> H["Bullet selection from<br/>fact-checked experience bank"]
-        H --> I["LLM fill: summary + cover letter<br/>(British English enforced)"]
-        I --> J["Validation gates V1–V13"]
-        J --> K[CV + cover letter PDFs<br/>reportlab]
-    end
-
-    subgraph TRACK["4 · Outcome tracking"]
-        L[IMAP inbox] --> M[Claude email classifier]
-        M -->|status updates| E
-        M -->|no match| N[unmatched queue<br/>manual review]
-    end
+    A[LinkedIn / Apify] -->|scrape| B[run_scout.py]
+    B -->|raw jobs| C[enrich_jobs.py]
+    C -->|enriched| D["score_jobs.py\nPass 1: Python rules\nPass 2: Claude Haiku batch"]
+    D -->|scored_jobs.json| E[write_tracker.py]
+    E -->|job_tracker.json| F[sheets_sync.py push]
+    F -->|Google Sheet| G{Human Review}
+    G -->|Approve + add ATS URL| H[sheets_sync.py pull]
+    H -->|Approved status| I["application_prep agent\nauto_prep.py"]
+    I -->|resume JSON + cover JSON| J["generate_summaries.py\ngenerate_covers.py"]
+    J -->|LLM output| K["finalize_cover.py\nfinalize_resumes.py"]
+    K -->|final JSONs| L["pdf_renderer.py\nReportLab ATS-safe PDF"]
+    L -->|ready/ folder| M{Apply / Refer}
+    M -->|email reply| N["gmail_backfill.py\nIMAP + Claude classifier"]
+    N -->|status update| E
 ```
 
-## What makes it trustworthy enough to run unattended
+## Quick Start
 
-The interesting engineering here isn't the AI — it's the guardrails that let the AI run without supervision:
+```bash
+# 1. Clone and install
+git clone https://github.com/YOUR_USERNAME/Claude-Workflow-Automation-public.git
+cd Claude-Workflow-Automation-public
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
 
-- **Two-pass scoring** — cheap deterministic gates (title tiers, posting age, language detection, visa sponsor registers) reject ~95% of scraped roles before any LLM call. Claude only scores survivors, keeping API cost near zero.
-- **Four-signal deduplication** — job-ID + market match, URL match, fuzzy company+title match, and recruiter-slug matching that catches the same role re-posted by an agency under two different IDs.
-- **Hard overrides on top of LLM scores** — a scored role can still be force-rejected or downgraded by rule (wrong role focus, SAP-primary tooling, consulting below threshold), so one generous LLM score can't leak a bad application through.
-- **A fact-checked experience bank as the only content source** — the generator selects and rephrases real bullets; it cannot invent experience, metrics, or skills. Thirteen post-generation validation checks (V1–V13) verify structure, claims, spelling conventions, and domain-specific rules before any PDF is rendered.
-- **Human approval gate** — nothing is ever submitted automatically. The Google Sheet is the control surface: a human reviews the shortlist, supplies the ATS URL, and flips the status that triggers prep.
-- **Terminal-state protection** — rejected/withdrawn statuses can never be overwritten by automation; every status change appends to an audit history.
-- **Self-checking workflow** — a `check_workflow.py` integrity suite (file presence, schema validation, sync consistency) runs via Claude Code hooks after any pipeline edit.
+# 2. Configure
+cp .env.example .env          # fill in your API keys
+# Fill data/content/candidate_profile.json (see CONFIGURE_CHECKLIST.md)
+# Write data/content/experience_bank.md (your resume bullet content)
 
-## Repo map
+# 3. Integrity check
+python3 scripts/check_workflow.py
 
-| Path | What it is |
-|---|---|
-| `scripts/` | The pipeline: scraping + cache, two-pass scoring, prep, PDF rendering, Sheets sync, email tracking, eval harness |
-| `agents/` | Agent definitions: job scout, application prep, tracker |
-| `skills/` | Reusable skills: score a JD, tailor a resume, draft a cover letter |
-| `hooks/` | Event wiring: on-approval → prep, on-email → status update |
-| `.claude/settings.json` | Claude Code hooks — post-edit integrity checks |
-| `.github/workflows/` | Daily scheduled scout runs |
-| `data/` | Private state layer — excluded here, see `data/README.md` |
-| `workflow_reference.html` | Interactive walkthrough of the full 5-step workflow |
+# 4. Dry run (no API calls made)
+python3 scripts/run_scout.py --dry-run
 
-In production the pipeline is steered by a ~600-line `CLAUDE.md` — a declarative "constitution" of rules, scoring rubrics, and behavioural constraints that every agent session loads first. It contains personal search criteria, so it's excluded from this public copy.
+# 5. First scout run
+python3 scripts/run_scout.py --market uk --yes
+python3 scripts/write_tracker.py
+python3 scripts/sheets_sync.py push --tabs apps,archive
 
-## Notes
+# 6. Review jobs in Google Sheet, approve + add ATS URL, then pull
+python3 scripts/sheets_sync.py pull --tabs apps,archive
+# In Claude Code: "run application prep"
+```
 
-This repo is a portfolio snapshot, not a turnkey product: it needs API keys (`.env`), a Google service account, and personal content files to run. It's published to show the architecture — agent orchestration, LLM cost control, validation-gate design, and state management — rather than to be cloned and executed.
+## Documentation
 
-Built by **Vinay Patidar** — Lead Analytics professional (8+ years: ecommerce, marketplace, agri-tech) exploring what production-grade AI automation looks like when applied to a real, personal problem.
+| File | Purpose |
+|------|---------|
+| CONFIGURE_CHECKLIST.md | Master setup checklist — start here |
+| SETUP.md | Prerequisites and step-by-step setup guide |
+| CLAUDE_PROJECT_SETUP.md | Claude Code install, MCP config, hooks wiring |
+| TOOL_COMMANDS.md | All daily-use commands for every pipeline stage |
+| COST_GUIDE.md | Subscription and API cost breakdown with estimates |
+| CONFIGURATION.md | Full parameter reference for every config file |
+| ANTI_HALLUCINATION.md | Experience bank philosophy and validation checks |
+| templates/google_sheets_setup.md | Google Sheets service account setup |
 
-[LinkedIn](https://www.linkedin.com/in/vinay-patidar-vp02/) · vinay_patidar02@yahoo.com
+## Cost Summary
+
+| Component | Cost |
+|-----------|------|
+| Claude Code Pro | $20/month (required subscription) |
+| Apify | $0/month (includes $5 free credit — covers ~6 full international runs/month) |
+| Claude API | ~$0.10–$0.25 per scout run, ~$0.05–$0.12 per application prep |
+| Google Sheets API | Free |
+| IMAP email tracking | Free (Yahoo / Gmail / Outlook) |
+
+See COST_GUIDE.md for a full breakdown and practical monthly estimates at different usage levels.
+
+## Supported Markets
+
+UK · Netherlands · Germany · Denmark · Ireland · Sweden · UAE
+
+Each market has its own LinkedIn search configuration, city tier scoring, salary threshold,
+and visa framing in generated cover letters. See CONFIGURATION.md for market setup instructions.
+
+## Design Principles
+
+- **No hallucination**: resumes draw only from experience_bank.md — nothing is invented
+- **Batch API by default**: 50% cost reduction vs real-time; prompt caching for ~90% input token savings
+- **Config-driven**: every personal and profession-specific value lives in candidate_profile.json
+- **Validation layer**: 20+ pre-render checks block incorrect content before it reaches any PDF
+- **Apify 24h cache**: prevents re-spending on same-day re-runs
+
+## What you need to configure
+
+1. Fill `.env` with your API keys (see .env.example for instructions per variable)
+2. Fill `data/content/candidate_profile.json` with your personal and professional details
+3. Write `data/content/experience_bank.md` with your work history and bullet points
+4. Add your LinkedIn search URLs to `scripts/run_scout.py` (SEARCHES_APIFY block)
+5. Set your target roles, salary threshold, and location tiers in `CLAUDE.md §3`
+6. Set your scoring rubric in `docs/fit-scoring-rubric.md`
+
+Full step-by-step instructions: CONFIGURE_CHECKLIST.md
+
+## Prerequisites
+
+- Python 3.10+
+- Node.js 16+ (required for Claude Code MCP servers)
+- Claude Code Pro subscription ($20/month) — claude.ai/code
+- Apify account — apify.com (free tier, $5/month credit included)
+- Google Cloud account for Sheets API service account (free tier sufficient)
+- Yahoo Mail, Gmail, or Outlook account for IMAP email tracking (free)
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT License. See LICENSE file.

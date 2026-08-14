@@ -7,21 +7,47 @@ Use this for: post-hoc audits, retroactive title corrections, one-off checks.
 
 Returns (pts: int, reason: str) where pts maps to the 5-tier rubric:
   20 = Tier 1 — Manager / Lead / Head / Principal
-  15 = Tier 2 — Senior non-Lead analytics role
-  10 = Tier 3 — Senior Data Analyst or senior analytics role
-   5 = Tier 4 — BA / DA / non-senior analyst
+  15 = Tier 2 — Senior non-Lead role in your domain
+  10 = Tier 3 — Senior IC (individual contributor) in your domain
+   5 = Tier 4 — Non-senior role in your domain
    0 = Tier 5 — Unrelated / unclear
 
 CLI:
   python3 scripts/classify_title.py "Business Intelligence Manager"
   python3 scripts/classify_title.py --batch   (stdin, one title per line)
+
+═══════════════════════════════════════════════════════════════════════════════
+USER CONFIGURATION — Profession-Specific Title Tier Patterns
+═══════════════════════════════════════════════════════════════════════════════
+The default patterns below are tuned for analytics/data roles. Adapt for your profession:
+
+  SOFTWARE ENGINEERING:
+    _HAS_DOMAIN = re.compile(r'\\b(engineer|developer|programmer|architect|devops|platform)\\b')
+    _HAS_LEAD_MGR = re.compile(r'\\b(manager|lead|head|principal|staff|distinguished|fellow)\\b')
+    _TIER2 additions: "Tech Lead", "Engineering Manager", "Principal Engineer"
+    _TIER4 additions: "Junior Engineer", "Associate Engineer", "Graduate Developer"
+
+  FINANCE / FP&A:
+    _HAS_DOMAIN = re.compile(r'\\b(finance|financial|accounting|treasury|fp&a|risk|compliance)\\b')
+    _HAS_LEAD_MGR = re.compile(r'\\b(manager|controller|head|director|vp|partner)\\b')
+    _TIER2 additions: "Senior Financial Analyst", "Finance Manager", "Risk Manager"
+    _TIER4 additions: "Financial Analyst", "Accounts Analyst", "Audit Associate"
+
+  PRODUCT MANAGEMENT:
+    _HAS_DOMAIN = re.compile(r'\\b(product|growth|platform|strategy|portfolio)\\b')
+    _HAS_LEAD_MGR = re.compile(r'\\b(director|head|senior|principal|group|general)\\b')
+    _TIER2 additions: "Senior Product Manager", "Group PM", "Lead PM"
+    _TIER4 additions: "Associate PM", "Product Analyst", "Junior PM"
+
+Edit the patterns below (and _TIER2 / _TIER4 lists) to match YOUR seniority ladder.
+═══════════════════════════════════════════════════════════════════════════════
 """
 import re
 import sys
 
 
 # ── Suppression guards ────────────────────────────────────────────────────────
-# Roles that superficially look like Tier 1 but are above-target or non-analytics.
+# Roles that superficially look like Tier 1 but are above-target or out of scope.
 
 _VP_PATTERN  = re.compile(r'\b(vp|vice president|director|c-suite|chief|svp|evp|partner)\b')
 _DATA_SCI_ENG = re.compile(
@@ -29,12 +55,15 @@ _DATA_SCI_ENG = re.compile(
     r'machine learning engineer|software engineer|devops|mlops)\b'
 )
 
-# ── Broadened analytics keyword set ──────────────────────────────────────────
-# Covers full-form and abbreviated variants, UK/US spellings, adjacent domains.
+# ── Domain keyword set ────────────────────────────────────────────────────────
+# Covers your target role domain. Edit to match your profession (see config block above).
+# Default: analytics/data domain keywords.
 _HAS_ANALYTICS = re.compile(
     r'\b(analytics|analyst|insights?|intelligence|growth|commercial|'
     r'performance|behavioural?|behavioral|reporting|crm)\b'
 )
+# Alias: the variable name is kept as _HAS_ANALYTICS internally (backward compat with score_jobs.py).
+# To change domain: update the pattern above, not the variable name.
 
 _HAS_LEAD_MGR = re.compile(r'\b(manager|lead|head|principal)\b')
 
@@ -50,7 +79,7 @@ _TIER1_EXPLICIT = [
 _TIER2 = [
     re.compile(r'\bsenior (business|product|performance|insights?|bi|analytics|data quality) analyst\b'),
     re.compile(r'\bsenior analytics engineer\b'),
-    re.compile(r'\b(bi|business intelligence) (manager|product lead|lead|analyst)\b'),
+    re.compile(r'\b(bi|business intelligence) (manager|product lead|lead)\b'),
     re.compile(r'\bbusiness intelligence (manager|lead|head)\b'),
 ]
 
@@ -96,6 +125,18 @@ def classify_title(title: str) -> tuple[int, str]:
         if has_lead_mgr:
             return 5, "Tier 4 (capped — Governance management role)"
         return 0, "Tier 5 — Governance (non-analytics)"
+
+    # Associate Director exception: in UK/EU firms this = Senior Manager equiv (not VP level)
+    # Intercept before _VP_PATTERN suppresses the Tier 1 branch below.
+    # Both "Associate Director of Analytics" and "Associate Analytics Director" match.
+    _is_assoc_dir = (
+        re.search(r'\bassociate director\b', t)
+        or (re.search(r'\bassociate\b', t) and re.search(r'\bdirector\b', t))
+    )
+    if _is_assoc_dir and not is_governance:
+        if has_analytics:
+            return 20, "Tier 1 — Associate Director (analytics context, Senior Manager equiv)"
+        return 0, "Tier 5 — Associate Director (no analytics context)"
 
     # Explicit Tier 1 titles that don't hit the general has_analytics pattern
     for p in _TIER1_EXPLICIT:
@@ -224,6 +265,9 @@ def main():
         # AI roles that should NOT hit AI enablement path
         ("AI Product Analyst",                        5),  # no enablement keyword → Tier 4
         ("AI Analytics Manager",                     20),  # manager + analytics → Tier 1 (unchanged)
+        # BI Analyst should be Tier 4 — not elevated to Tier 2 by the BI pattern
+        ("Business Intelligence Analyst",             5),
+        ("BI Analyst",                                5),
         # Product Manager suppression — should be Tier 4 regardless of analytics suffix
         ("Senior Product Manager - Analytics",        5),  # analytics suffix should not elevate to Tier 1
         ("AI Product Manager",                        5),  # "manager" alone insufficient without analytics

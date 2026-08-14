@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 """
-gmail_backfill.py — Email backfill via Yahoo IMAP (imaplib, no external deps).
+gmail_backfill.py — Email backfill via IMAP (imaplib, no external deps).
+Despite the name, this script works with ANY IMAP provider — Yahoo, Gmail, Outlook, etc.
 Searches inbox for job-related emails, classifies via Claude API, updates tracker.
+
+IMAP PROVIDERS (set IMAP_HOST + IMAP_PORT below):
+  Yahoo:   imap.mail.yahoo.com   port 993  (default — uses App Password, simple setup)
+  Gmail:   imap.gmail.com        port 993  (requires Gmail App Password + IMAP enabled)
+  Outlook: outlook.office365.com port 993  (requires App Password / Modern Auth)
 
 Usage:
     python3 scripts/gmail_backfill.py              # last 2 days (default, normal mode)
@@ -32,42 +38,55 @@ SUBJECT_KEYWORDS = [
     "first step",       # Oracle HCM confirmation: "You've taken the first step"
 ]
 
-# ATS platform sender domains — fetch ALL emails from these regardless of subject
-# Catches Greenhouse/Workday/Lever emails with generic subjects like "Workday Recruiting: Lead Data Analyst"
-ATS_SENDER_DOMAINS = [
+# ═══════════════════════════════════════════════════════════════
+# USER CONFIGURATION — ATS Sender Domains
+# ═══════════════════════════════════════════════════════════════
+# ATS_SENDER_DOMAINS: fetch ALL emails from these domains regardless of subject line.
+# This catches ATS emails with generic subjects (e.g. "Workday Recruiting: Your Application").
+#
+# GENERIC_ATS_DOMAINS below covers the major platforms automatically.
+# Add company-specific domains to ADDITIONAL_SENDER_DOMAINS as you receive emails from them.
+# Format: "company.com" or "subdomain.company.com"
+# EXAMPLE: ["mycompany.com", "noreply.bigcorp.co.uk", "talent.startup.io"]
+ADDITIONAL_SENDER_DOMAINS: list[str] = []
+# ═══════════════════════════════════════════════════════════════
+
+# Generic ATS platform domains — covers major platforms out of the box
+_GENERIC_ATS_DOMAINS = [
     "greenhouse.io", "myworkday.com", "myworkdayjobs.com", "lever.co",
     "ashbyhq.com", "smartrecruiters.com", "icims.com", "taleo.net",
     "jobvite.com", "bamboohr.com", "workable.com", "teamtailor.com",
+    "teamtailor-mail.com",  # Teamtailor client branded emails
     "successfactors.com", "pinpointhq.com", "recruitee.com",
     "screenloop.io",
-    "brassring.com",        # IBM Kenexa BrassRing (Jet2)
-    "teamtailor-mail.com",  # Teamtailor client emails (e.g. LEGO Digital Play, Awaze)
-    "legodigitalplay.com",  # LEGO Digital Play direct emails (fallback)
-    "oraclecloud.com",      # Oracle HCM (large enterprise ATS)
-    "oracle.com",           # Oracle HCM fallback sender domain
-    "sainsburys.co.uk",     # Sainsbury's Oracle HCM branded sender (myhr.sainsburys.co.uk)
+    "brassring.com",    # IBM Kenexa BrassRing
+    "oraclecloud.com",  # Oracle HCM (large enterprise ATS)
+    "oracle.com",       # Oracle HCM fallback sender domain
 ]
 
+ATS_SENDER_DOMAINS = _GENERIC_ATS_DOMAINS + ADDITIONAL_SENDER_DOMAINS
+
 # ── Load .env ─────────────────────────────────────────────────────────────────
-def load_env() -> dict:
-    env = {}
-    env_file = ROOT / ".env"
-    if not env_file.exists():
-        return env
-    for line in env_file.read_text().splitlines():
-        if "=" in line and not line.startswith("#"):
-            k, v = line.split("=", 1)
-            env[k.strip()] = v.strip()
-    return env
+sys.path.insert(0, str(ROOT / "scripts"))
+from common import load_env  # single source: scripts/common.py
 
 # ── Load / save processed message ID log ──────────────────────────────────────
+# "verdicts" caches the Claude classification result per msg_id so backfills and
+# --retry-unmatched never re-pay classification for an email already classified.
 def load_processed() -> set:
     if PROCESSED.exists():
         return set(json.loads(PROCESSED.read_text()).get("ids", []))
     return set()
 
-def save_processed(ids: set):
-    PROCESSED.write_text(json.dumps({"ids": sorted(ids)}, indent=2))
+def load_verdicts() -> dict:
+    if PROCESSED.exists():
+        return json.loads(PROCESSED.read_text()).get("verdicts", {})
+    return {}
+
+def save_processed(ids: set, verdicts: dict = None):
+    if verdicts is None:
+        verdicts = load_verdicts()  # preserve existing cache
+    PROCESSED.write_text(json.dumps({"ids": sorted(ids), "verdicts": verdicts}, indent=2))
 
 # ── Decode MIME header (handles encoded-word =?utf-8?...?=) ──────────────────
 def decode_mime_header(value: str) -> str:
@@ -129,13 +148,45 @@ def _company_subject_terms(since_str: str) -> list[str]:
         raw = json.loads(TRACKER.read_text())
         entries = raw if isinstance(raw, list) else raw.get("applications", [])
         active_statuses = {"Prep Complete", "Applied", "Referral", "Under Review", "Interview Scheduled", "Assessment"}
+        # Also include recently-rejected/withdrawn companies (last 30 days) so late
+        # confirmation emails (e.g. Wolt rejection arriving after manual status set) are caught.
+        try:
+            cutoff = (date.today() - timedelta(days=30)).isoformat()
+        except Exception:
+            cutoff = ""
+        recent_terminal = {"Rejected", "Withdrawn"}
         companies = set()
         for e in entries:
-            if e.get("status") in active_statuses:
-                company = (e.get("company") or "").strip()
-                # Use first meaningful token: "9fin" → "9fin", "Simply Business" → "Simply Business"
-                if company and len(company) >= 3:
-                    companies.add(company)
+            status = e.get("status")
+            is_active = status in active_statuses
+            is_recent_terminal = (
+                status in recent_terminal
+                and cutoff
+                and any(
+                    (h.get("date") or h.get("timestamp", "")[:10]) >= cutoff
+                    for h in e.get("status_history", [])
+                    if h.get("status") == status
+                )
+            )
+            if not (is_active or is_recent_terminal):
+                continue
+            company = (e.get("company") or "").strip()
+            if not company or len(company) < 3:
+                continue
+            # Strip common suffixes so "ASOS.com" → "ASOS", "Zopa Bank" → "Zopa"
+            # Using just the most distinctive leading word avoids false negatives
+            # when company name in email subject is shorter than the tracker field.
+            core = company.split(".")[0]          # "ASOS.com" → "ASOS"
+            core = core.split(" ")[0]             # "Zopa Bank" → "Zopa"
+            if len(core) >= 3:
+                companies.add(core)
+            # Also index the agency name — emails from agencies (e.g. "Hunter Bond")
+            # arrive with the agency name in the subject, not the anonymous client company.
+            agency = (e.get("agency_name") or "").strip()
+            if agency and len(agency) >= 3:
+                agency_core = agency.split(".")[0].split(" ")[0]
+                if len(agency_core) >= 3:
+                    companies.add(agency_core)
         return [f'SINCE {since_str} SUBJECT "{c}"' for c in sorted(companies)]
     except Exception:
         return []
@@ -169,6 +220,9 @@ def fetch_candidate_emails(imap, since_date: date) -> list:
         f'SINCE {since_str} SUBJECT "vacancy"',
         f'SINCE {since_str} SUBJECT "role"',
         f'SINCE {since_str} SUBJECT "position"',
+        f'SINCE {since_str} SUBJECT "update from"',   # direct recruiter emails e.g. "[Your Name] - update from [Company]"
+        f'SINCE {since_str} SUBJECT "thank you for your interest"',
+        f'SINCE {since_str} SUBJECT "thanks for applying"',
     ]
 
     def _parse_uid(uid):
@@ -313,6 +367,7 @@ def retry_unmatched(env: dict, dry_run: bool):
                 if a.get("status") in APPLICATIONS_TAB_STATUSES]
     TERMINAL_STATUSES = {"Rejected", "Withdrawn"}
     processed_ids = load_processed()
+    verdict_cache = load_verdicts()
     newly_processed = set()
 
     resolved      = []
@@ -338,7 +393,29 @@ def retry_unmatched(env: dict, dry_run: bool):
             still_unmatched.append(entry)
             continue
 
-        result = classify_email_claude(subject, body)
+        # Guard against Yahoo IMAP UID reuse: if the re-fetched subject differs
+        # significantly from the stored subject, the UID points to a different email.
+        # Skip rather than process the wrong message.
+        stored_subject = (entry.get("subject") or "").strip().lower()
+        fetched_subject = subject.strip().lower()
+        if stored_subject and fetched_subject:
+            from difflib import SequenceMatcher
+            _similarity = SequenceMatcher(None, stored_subject, fetched_subject).ratio()
+            if _similarity < 0.6:
+                print(f"  ⚠ Subject mismatch (UID reused by Yahoo — skipping to avoid wrong match)")
+                print(f"    Stored:  {entry.get('subject','')[:60]}")
+                print(f"    Fetched: {subject[:60]}")
+                still_unmatched.append(entry)
+                continue
+
+        # Reuse cached verdict — retries only need re-MATCHING, not re-classification
+        if msg_id and msg_id in verdict_cache:
+            result = verdict_cache[msg_id]
+            print(f"  → Classification reused from cache (no API call)")
+        else:
+            result = classify_email_claude(subject, body)
+            if msg_id:
+                verdict_cache[msg_id] = result
         if not result.get("is_job_related") or result.get("status") == "Not Relevant":
             print(f"  → Still not job-related after retry")
             updated = dict(entry)
@@ -404,14 +481,13 @@ def retry_unmatched(env: dict, dry_run: bool):
         existing_resolved = unmatched_log.get("resolved_emails", [])
         unmatched_log["resolved_emails"] = existing_resolved + resolved
         unmatched_path.write_text(json.dumps(unmatched_log, indent=2))
-        if newly_processed:
-            save_processed(processed_ids | newly_processed)
+        save_processed(processed_ids | newly_processed, verdict_cache)
 
     print(f"\n[retry] Resolved: {len(resolved)}  |  Still unmatched: {len(still_unmatched)}")
 
     if not dry_run and resolved:
         result = subprocess.run(
-            ["python3", "scripts/sheets_sync.py", "push"],
+            ["python3", "scripts/sheets_sync.py", "push", "--tabs", "apps,archive"],
             capture_output=True, text=True, cwd=ROOT
         )
         if result.returncode == 0:
@@ -448,7 +524,20 @@ def main():
         print("ERROR: YAHOO_EMAIL and YAHOO_APP_PASSWORD must be set in .env")
         sys.exit(1)
 
+    # ── Pull latest Sheet edits into tracker ─────────────────────────────────
+    if not dry_run:
+        print(f"[hook] Pulling latest Sheet edits...")
+        _pull = subprocess.run(
+            ["python3", "scripts/sheets_sync.py", "pull", "--tabs", "apps,archive"],
+            capture_output=True, text=True, cwd=ROOT
+        )
+        if _pull.returncode == 0:
+            print("[hook] Tracker updated from Sheet")
+        else:
+            print(f"[hook] ⚠ Pull failed: {_pull.stderr[:80]} — proceeding with local tracker")
+
     processed_ids = load_processed()
+    verdict_cache = load_verdicts()
 
     # Connect to Yahoo IMAP
     print(f"[hook] Connecting to Yahoo IMAP ({IMAP_HOST})...")
@@ -501,7 +590,7 @@ def main():
         rcvd     = item["received_date"]
 
         # Skip already-processed (normal mode; backfill re-reads all)
-        if msg_id in processed_ids and "--backfill" not in args:
+        if msg_id in processed_ids:
             stats["skipped_processed"] += 1
             continue
 
@@ -509,8 +598,13 @@ def main():
         print(f"\n[{stats['scanned']}] {rcvd} — {sender[:45]}")
         print(f"  Subject: {subject[:70]}")
 
-        # Classify
-        result = classify_email_claude(subject, body)
+        # Classify — reuse cached verdict if this email was classified before
+        if msg_id in verdict_cache:
+            result = verdict_cache[msg_id]
+            print(f"  → Classification reused from cache (no API call)")
+        else:
+            result = classify_email_claude(subject, body)
+            verdict_cache[msg_id] = result
         if not result.get("is_job_related") or result.get("status") == "Not Relevant":
             print(f"  → Not job-related ({result.get('notes','')[:60]})")
             newly_processed.add(msg_id)
@@ -601,17 +695,17 @@ def main():
 
         newly_processed.add(msg_id)
 
-    # Persist processed IDs and unmatched log
+    # Persist processed IDs, classification verdicts, and unmatched log
     if not dry_run:
-        save_processed(processed_ids | newly_processed)
+        save_processed(processed_ids | newly_processed, verdict_cache)
         if unmatched_log["unmatched_emails"]:
             unmatched_path.write_text(json.dumps(unmatched_log, indent=2))
 
-    # Sync to Google Sheets if anything changed
-    if not dry_run and stats["updated"] > 0:
+    # Sync to Google Sheets (always push to reflect current tracker state)
+    if not dry_run:
         print(f"\n[hook] Syncing to Google Sheet...")
         result = subprocess.run(
-            ["python3", "scripts/sheets_sync.py", "push"],
+            ["python3", "scripts/sheets_sync.py", "push", "--tabs", "apps,archive"],
             capture_output=True, text=True, cwd=ROOT
         )
         if result.returncode == 0:
@@ -628,11 +722,31 @@ def main():
     print(f"  Status updated:      {stats['updated']}")
     print(f"  Already up-to-date:  {stats['already_current']}")
     print(f"  Unmatched:           {stats['unmatched']}  (see data/unmatched_emails.json)")
+
+    # Surface the accumulated dead-letter backlog, not just this run's additions
+    try:
+        _backlog = json.loads(unmatched_path.read_text()).get("unmatched_emails", []) \
+            if unmatched_path.exists() else []
+        if _backlog:
+            _oldest = min((e.get("received_date") or "9999") for e in _backlog)
+            print(f"  ⚠ Pending backlog:   {len(_backlog)} unmatched emails awaiting review "
+                  f"(oldest: {_oldest}) — run --retry-unmatched or review manually")
+    except Exception:
+        pass
     print(f"{'='*60}\n")
     if stats["unmatched"] > 0:
         print("  Next: check data/unmatched_emails.json for emails that didn't match.")
     if stats["updated"] > 0:
         print("  Next: open Google Sheet to review updated statuses.")
+
+    # Git commit + push (versioning + backup)
+    if not dry_run:
+        from git_sync import commit_and_push as _git_push
+        _git_push("email", [
+            "data/job_tracker.json",
+            "data/processed_email_ids.json",
+            "data/unmatched_emails.json",
+        ])
 
 if __name__ == "__main__":
     main()

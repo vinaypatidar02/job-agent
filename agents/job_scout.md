@@ -24,35 +24,44 @@
 #
 # Mapping of user prompts → exact command to run:
 #
-#   "run scout"                → python3 scripts/run_scout.py
+#   "run scout"                → python3 scripts/run_scout.py --yes  (intl default: NL + DE + DK + IE; --yes skips stdin prompt)
 #   "run scout --age 1"        → python3 scripts/run_scout.py --age 1
 #   "run scout --age 7"        → python3 scripts/run_scout.py --age 7
 #   "run scout --expanded"     → python3 scripts/run_scout.py --expanded
 #   "run scout --age 1 --expanded" → python3 scripts/run_scout.py --age 1 --expanded
 #   "run scout netherlands"    → python3 scripts/run_scout.py --market nl
 #   "run scout sweden"         → python3 scripts/run_scout.py --market se
+#   "run scout germany"        → python3 scripts/run_scout.py --market de
+#   "run scout denmark"        → python3 scripts/run_scout.py --market dk
+#   "run scout ireland"        → python3 scripts/run_scout.py --market ie
 #   "run scout all markets"    → python3 scripts/run_scout.py --market all
 #
-# --market flag:  uk (default) | nl | se | all
-#   Selects which markets to scrape. Default is uk-only — backward compatible.
-#   Cost breakdown per run (Apify, max slots × $0.001/job):
-#     --market uk:  4 URLs × 100 = $0.40 max
-#     --market nl:  4 URLs × 100 = $0.40 max
-#     --market se:  4 URLs × 100 = $0.40 max
-#     --market all: 12 URLs × 100 = $1.20 max (in practice much less — NL/SE fewer results)
-#   Adzuna is free in all markets (12 searches per market).
+# --market flag:  intl (default = NL + DE + DK + IE) | uk | nl | se | de | dk | ie | all
+#   Selects which markets to scrape. Default is intl (NL + DE + DK + IE; DK/IE added 2026-07-24).
+#   UK deprioritised 2026-07-24 — strict visa restrictions, low expected yield.
+#   Cost breakdown per run (Apify, max slots × $0.001/job) — post 2026-07-24 DK/IE addition:
+#     --market nl:   2 URLs (LDA 100 + LBA 75) = $0.175 max
+#     --market de:   2 URLs (LDA 100 + LBA 75) = $0.175 max
+#     --market dk:   2 URLs (LDA 100 + LBA 75) = $0.175 max
+#     --market ie:   2 URLs (LDA 100 + LBA 75) = $0.175 max
+#     --market intl: 8 URLs (NL+DE+DK+IE)      = $0.70 max
+#     --market uk:   3 URLs (LDA/LBA/AM × 100) = $0.30 max
+#     --market se:   3 URLs (LDA/LBA/AM × 100) = $0.30 max
+#     --market all:  14 URLs                   = $1.30 max
+#   Adzuna is free where supported (gb/nl only — API 404 for se/dk/ie, verified 2026-07-24).
 #
 # The script handles everything end-to-end:
 #   - Argument parsing (age, expanded, market)
 #   - Cache check + cost estimate printed before any Apify call
 #   - Confirmation prompt (user types Y to proceed)
 #   - CachedScraper.get_batch() per market with correct post_age_days
-#   - Stamps market field ("uk"/"nl"/"se") on every scraped job
+#   - Stamps market field ("uk"/"nl"/"se"/"de"/"dk"/"ie") on every scraped job
 #   - Saves raw output to data/pipeline/raw_scrape_output.json
 #   - Calls enrich_jobs.py automatically → data/pipeline/enriched_scrape_output.json
 #   - Calls score_jobs.py automatically → data/pipeline/scored_jobs.json + data/auto_rejected.json
 #
-# DEFAULT behaviour (no flags): UK only, age 7 days
+# DEFAULT behaviour (no flags): NL + DE + DK + IE (intl), past 24h (baked into LinkedIn URLs)
+# Use --market all for UK + NL + SE + DE, --market uk for UK-only.
 # NEVER default to expanded list or age values not explicitly passed.
 
 # ── STEP 2 — WRITE SHORTLISTED/REVIEW/STALE TO TRACKER ───────
@@ -60,12 +69,13 @@
 #
 # This script handles all tracker writes from scored_jobs.json:
 #   - Reads data/pipeline/scored_jobs.json (Shortlisted + Review Needed + Stale entries)
-#   - Deduplicates by jd_url exact match only (score_jobs.py already ran
-#     all complex fuzzy / stale-exception / agency-URL dedup — do NOT
-#     re-implement dedup here or you risk blocking valid fresh reposts)
+#   - Deduplicates by (job_id, market) first, then jd_url exact match
+#     (score_jobs.py already ran all complex fuzzy / stale-exception /
+#     agency-URL dedup — do NOT re-implement dedup here or you risk
+#     blocking valid fresh reposts)
 #   - Assigns next sequential app_<NNN> IDs
 #   - Writes all three status types to job_tracker.json
-#   - Safe to run twice — duplicate jd_urls are skipped on second run
+#   - Safe to run twice — duplicate (job_id, market) / jd_urls are skipped on second run
 #
 # NEVER write ad-hoc Python to do this step — the stale+fresh repost
 # exception is subtle and the script already handles it correctly.
@@ -102,7 +112,7 @@
 # both follow the same two-part flow above. No blocking difference.
 
 # ── STEP 3 — SYNC TO GOOGLE SHEETS ───────────────────────────
-# Run: python3 scripts/sheets_sync.py push
+# Run: python3 scripts/sheets_sync.py push --tabs apps,archive
 # This updates the Google Sheet with all new shortlisted entries
 # so you can review, edit status, and paste career_page_url.
 # Log: "[scout] Google Sheet updated"
@@ -122,7 +132,7 @@
 #   ───────────────────────────────────────
 #    Next step: open Google Sheet, review shortlisted jobs,
 #    paste career_page_url, set status → Approved,
-#    then run: python3 scripts/sheets_sync.py pull
+#    then run: python3 scripts/sheets_sync.py pull --tabs apps,archive
 #   ═══════════════════════════════════════
 
 # ── ERROR HANDLING ────────────────────────────────────────────

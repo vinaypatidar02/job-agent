@@ -25,14 +25,18 @@ import shutil
 import sys
 from pathlib import Path
 
-BASE_DIR   = Path(__file__).parent.parent
-TRACKER    = BASE_DIR / "data" / "job_tracker.json"
-APPS_DIR   = BASE_DIR / "outputs" / "applications"
-READY_DIR  = APPS_DIR / "ready"
-DONE_DIR   = APPS_DIR / "done"
-SKIP_DIRS  = {"_test_output", "ready", "done"}
+BASE_DIR      = Path(__file__).parent.parent
+TRACKER       = BASE_DIR / "data" / "job_tracker.json"
+APPS_DIR      = BASE_DIR / "outputs" / "applications"
+READY_DIR     = APPS_DIR / "ready"
+DONE_DIR      = APPS_DIR / "done"
+REFERRAL_DIR  = APPS_DIR / "referral"
+SKIP_DIRS     = {"_test_output", "ready", "done", "referral"}
 
-READY_STATUSES = {"Prep Complete", "Referral"}
+# Statuses where documents stay in ready/ (active, still being worked)
+READY_STATUSES    = {"Prep Complete", "Referral-Planned", "Connection-Requested", "Referral", "Reached-Out", "Followup"}
+# Statuses where documents move to referral/ (referral attempt concluded)
+REFERRAL_STATUSES = {"Referred", "Stale-Referral"}
 
 
 def organize_outputs(dry_run: bool = False) -> dict:
@@ -42,6 +46,7 @@ def organize_outputs(dry_run: bool = False) -> dict:
     """
     READY_DIR.mkdir(parents=True, exist_ok=True)
     DONE_DIR.mkdir(parents=True, exist_ok=True)
+    REFERRAL_DIR.mkdir(parents=True, exist_ok=True)
 
     tracker = json.loads(TRACKER.read_text())
     apps    = tracker["applications"]
@@ -62,22 +67,53 @@ def organize_outputs(dry_run: bool = False) -> dict:
         folder = resume_p.parent
 
         status     = entry.get("status", "")
-        target_sub = READY_DIR if status in READY_STATUSES else DONE_DIR
+        if status in REFERRAL_STATUSES:
+            target_sub = REFERRAL_DIR
+        elif status in READY_STATUSES:
+            target_sub = READY_DIR
+        else:
+            target_sub = DONE_DIR
         target_dir = target_sub / folder.name
 
         if folder == target_dir:
-            already_correct += 1
+            # Tracker path matches intended destination — but verify it actually exists there.
+            # If not, scan the other subdirectory (the folder may have landed in the wrong place).
+            if target_dir.exists():
+                already_correct += 1
+                continue
+            # Not found at target — look in the other subdirectory
+            other_sub  = DONE_DIR if target_sub == READY_DIR else READY_DIR
+            other_path = other_sub / folder.name
+            if other_path.exists():
+                print(f"  {'[DRY RUN] ' if dry_run else ''}fixing misplaced folder: "
+                      f"{other_sub.name}/ → {target_sub.name}/  ({status})")
+                if not dry_run:
+                    shutil.move(str(other_path), str(target_dir))
+                moved += 1
+            else:
+                print(f"  ⚠ Folder not found in ready/ or done/: {folder.name} — skipping")
             continue
 
         if not folder.exists():
-            # Folder already moved or missing — update path if it now exists at target
+            # Tracker path points to wrong subdirectory — check if it exists at target
             if target_dir.exists():
                 already_correct += 1
-                # Ensure tracker paths reflect the existing location
                 _update_paths(entry, folder.name, target_sub, BASE_DIR)
                 tracker_modified = True
             else:
-                print(f"  ⚠ Folder not found: {folder} — skipping")
+                # Also check the other subdirectory
+                other_sub  = DONE_DIR if target_sub == READY_DIR else READY_DIR
+                other_path = other_sub / folder.name
+                if other_path.exists():
+                    print(f"  {'[DRY RUN] ' if dry_run else ''}fixing misplaced folder: "
+                          f"{other_sub.name}/ → {target_sub.name}/  ({status})")
+                    if not dry_run:
+                        shutil.move(str(other_path), str(target_dir))
+                        _update_paths(entry, folder.name, target_sub, BASE_DIR)
+                        tracker_modified = True
+                    moved += 1
+                else:
+                    print(f"  ⚠ Folder not found: {folder} — skipping")
             continue
 
         print(f"  {'[DRY RUN] ' if dry_run else ''}{'→' if not dry_run else 'would move'} "

@@ -12,7 +12,7 @@
 
 # ── INPUT ────────────────────────────────────────────────────
 # A single enriched job object from enrich_jobs.py output.
-# Key fields (nexgendata actor + enrichment):
+# Key fields (curious_coder/linkedin-jobs-scraper actor + enrichment):
 #   job_title, company_name, location, job_url, job_id
 #   salary (native, often empty), job_type, posted_date
 #   description (full JD text)
@@ -70,11 +70,14 @@
 #   LOCATION (0–10):
 #     Match location field against CLAUDE.md Section 3 Tier list.
 #     10 = London
-#      8 = Manchester / Birmingham / Leeds
-#      6 = Reading / Milton Keynes / Cambridge / Oxford /
-#           Leicester / Coventry / Nottingham / Northampton
-#      4 = Tier 3 city (Bristol, Brighton, Luton, Watford, Slough)
-#      0 = outside all tiers → auto-reject regardless of other scores
+#      8 = Manchester / Birmingham
+#      6 = Leeds / Reading / Milton Keynes / Cambridge / Oxford /
+#           Leicester / Coventry / Nottingham / Northampton / Salford /
+#           Liverpool / Warrington / Solihull / Bradford / York /
+#           Welwyn Garden City / St Albans / Hatfield
+#      0 = Tier 3 (Bristol/Brighton/Luton/Watford/Slough/Guildford/Woking/
+#           Newbury/Derby/Sheffield/Cheltenham/Southampton) — requires score ≥ 85
+#           AND explicitly remote/hybrid; or outside all tiers → auto-reject
 #     If work_mode = "Remote" AND location is UK → score 8 minimum.
 #
 #   VISA SPONSORSHIP (0–5, or -10):
@@ -85,11 +88,11 @@
 #    -10 = explicitly states no sponsorship → TOTAL SCORE becomes 0,
 #          status = "Auto-Rejected", reason = "No visa sponsorship"
 #
-# Step 3 — SALARY GATE: upper end > £85k = shortlist (apply after scoring)
+# Step 3 — SALARY GATE: check against your configured threshold (CLAUDE.md §3 / score_jobs.py USER CONFIG)
 #   Use compensation_extracted if available, else native salary field.
-#     - Upper end > £85k → salary gate PASSED (even if lower < £85k)
-#     - Both ends < £85k → salary gate FAILED → auto-reject
-#     - Single figure < £85k → auto-reject
+#     - Upper end > [YOUR_SALARY_THRESHOLD] → salary gate PASSED (even if lower end is below)
+#     - Both ends < [YOUR_SALARY_THRESHOLD] → salary gate FAILED → auto-reject
+#     - Single figure < [YOUR_SALARY_THRESHOLD] → auto-reject
 #     - Not stated / "Competitive" → flag "Salary TBC", do not reject
 #
 # Step 4 — DECIDE
@@ -98,6 +101,32 @@
 #   60–74                                                 → "Review Needed"
 #   < 60 OR visa rejected OR salary gate failed           → "Auto-Rejected"
 #   Duplicate detected (Step 1)                           → "skip"
+
+# ── CONTRACT / EOR SCORING RULES ─────────────────────────────
+# If is_contract=true (detected from job_type="contract" or JD keywords):
+#   - visa_sponsorship_status = "EOR" (candidate engages via Employer of Record;
+#     no employer visa sponsorship needed)
+#   - visa_score = 5 (same as Confirmed)
+#   - EXCEPTION: if JD explicitly states "no overseas contractors", "must have
+#     right to work as employee", or "IR35 inside [firm employees only]" →
+#     visa_sponsorship_status = "Rejected", visa_score = -10
+#
+# If is_remote_only=true OR work_mode="Remote":
+#   - location_score = 10 for ALL job locations (remote is timezone-agnostic;
+#     India aligns with UK/CET business hours)
+#
+# role_type = compute from is_contract × is_remote_only:
+#   is_contract=true  + is_remote_only=true   → "contract_remote"
+#   is_contract=true  + is_remote_only=false  → "contract_hybrid"
+#   is_contract=false + is_remote_only=true   → "permanent_remote"
+#   is_contract=false + is_remote_only=false  → "permanent_hybrid"
+#
+# eor_viability (integer 1–10, null for permanent non-remote roles):
+#   8–10: async-friendly, startup/scale-up, senior IC scope, no mandatory onsite
+#   5–7:  hybrid, mid-size, some office expectation
+#   1–4:  mandatory onsite, regulated entity requiring employee status,
+#         "no contractors" language
+#   Set eor_viability=null for permanent_hybrid roles.
 
 # ── OUTPUT ───────────────────────────────────────────────────
 # Return a JSON object with this exact shape:
@@ -117,11 +146,15 @@
 #     "location": <0–10>,
 #     "visa_sponsorship": <-10–5>
 #   },
-#   "visa_sponsorship_status": "Confirmed" | "Unconfirmed" | "Rejected",
+#   "visa_sponsorship_status": "Confirmed" | "EOR" | "Unconfirmed" | "Rejected",
 #   "salary_stated": "<compensation_extracted.display or native salary or 'Not stated'>",
 #   "salary_gate": "passed" | "failed" | "tbc",
 #   "salary_meets_threshold": true | false | null,
 #   "work_mode": "<from enrichment>",
+#   "is_contract": <bool>,
+#   "is_remote_only": <bool>,
+#   "role_type": "contract_remote" | "contract_hybrid" | "permanent_remote" | "permanent_hybrid",
+#   "eor_viability": <1–10 integer or null>,
 #   "experience_req": "<experience_years.display>",
 #   "ats_type": "<from enrichment>",
 #   "is_easy_apply": <bool>,
@@ -132,7 +165,7 @@
 # }
 
 # NOTE: After the calling agent writes to job_tracker.json,
-# it must run: python3 scripts/sheets_sync.py push
+# it must run: python3 scripts/sheets_sync.py push --tabs apps,archive
 # This skill does not do that directly — the agent does.
 
 # ── CONSTRAINTS ───────────────────────────────────────────────

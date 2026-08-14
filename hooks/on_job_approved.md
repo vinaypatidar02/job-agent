@@ -18,7 +18,7 @@
 
 # ── TRIGGER CONDITION ─────────────────────────────────────────
 # Fires after any write to data/job_tracker.json.
-# Most commonly triggered by: python3 scripts/sheets_sync.py pull
+# Most commonly triggered by: python3 scripts/sheets_sync.py pull --tabs apps,archive
 # (which you run after editing the Google Sheet)
 
 # ── STEP 1 — INSPECT WRITTEN FILE ────────────────────────────
@@ -62,21 +62,22 @@
 
 # ── STEP 3 — INVOKE APPLICATION_PREP ────────────────────────
 # If confirmed (or auto-confirm is set):
-#   Invoke agents/application_prep.md for each qualifying entry.
-#   Pass the full entry object as context.
+#   Collect ALL qualifying entry IDs. Invoke agents/application_prep.md
+#   once with all IDs — the agent runs run_prep.py which handles ALL
+#   jobs in parallel using ThreadPoolExecutor (not sequentially).
 #
-# The application_prep agent handles:
-#   - Fetching JD text from jd_url
-#   - Selecting resume variant
-#   - Invoking tailor_resume skill
-#   - Invoking draft_cover_letter skill
-#   - Calling pdf_renderer.py for both PDFs
-#   - Writing output files to outputs/applications/
-#   - Updating job_tracker.json (status → "Prep Complete")
-#   - Running sheets_sync.py push to update Google Sheet
+# run_prep.py handles:
+#   - Fetching JD text per job (Phase 1 parallel)
+#   - auto_prep + eval_prep per job (Phase 1 parallel)
+#   - Summary generation via Batch API — Haiku (Phase 2)
+#   - Cover letter generation via Batch API — Sonnet (Phase 3)
+#   - Resume finalization (Phase 4a)
+#   - Validate + render PDFs + meta.json (Phase 4b parallel)
+#   - Atomic tracker update + sheets_sync push + git commit (Phase 5)
 #
-# Process entries sequentially, not in parallel.
-# Log progress per entry.
+# CLI: python3 scripts/run_prep.py --keys <id1>,<id2>,...
+# Do NOT run jobs sequentially — pass all IDs at once to run_prep.py.
+# Log progress per phase (run_prep.py handles detailed logging).
 
 # ── STEP 4 — COMPLETION SUMMARY ───────────────────────────────
 # After all qualifying entries are processed:

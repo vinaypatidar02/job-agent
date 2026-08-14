@@ -1,0 +1,30 @@
+{
+  "_meta": {
+    "sheet_format_marker": "09fe7ead2e3c",
+    "last_push_snapshot": null,
+    "valid_statuses": [
+      "Shortlisted",
+      "Review Needed",
+      "Auto-Rejected",
+      "Stale",
+      "Approved",
+      "Prep Complete",
+      "Referral-Planned",
+      "Connection-Requested",
+      "Reached-Out",
+      "Followup",
+      "Referred",
+      "Stale-Referral",
+      "Applied",
+      "Referral",
+      "Under Review",
+      "Interview Scheduled",
+      "Assessment",
+      "Offer Received",
+      "Rejected",
+      "Withdrawn",
+      "Duplicate"
+    ]
+  },
+  "applications": []
+}

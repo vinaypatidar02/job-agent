@@ -17,7 +17,9 @@
 #   "jd_text": "<full job description text>",
 #   "tailored_resume": <tailor_resume.md output JSON>,
 #   "today": "<YYYY-MM-DD>",
-#   "market": "uk" | "nl" | "se"   ← determines date-city and Para 4 relocation sentence
+#   "market": "uk" | "nl" | "se" | "de" | "dk" | "ie",   ← determines date-city and Para 4 relocation sentence
+#   "work_mode": "Remote" | "Hybrid" | "On-site" | "Unknown",  ← optional; triggers remote framing
+#   "is_remote_only": true | false                              ← optional; confirmed remote-only flag
 # }
 
 # ── STEP 0 — READ COVER LETTER BANK & ANCHOR TO RESUME ───────
@@ -87,33 +89,122 @@
 #        a production-grade end-to-end agentic automation system using Claude Code, MCP
 #        servers, and the Anthropic API, fully operational in production."
 #     - NEVER omit — it is a mandatory differentiator in every application
-#   - If JD mentions MMM/attribution → add in Part A: "strong incrementality foundation
+#   - If JD mentions MMM/attribution → add in Part A: "strong incrementally foundation
 #     + active MMM/MTA study (Robyn, Meridian)" as a single sentence; never fabricate delivery
 #
-# PARAGRAPH 4 — Forward-looking + call to action (60–80 words)
+#   Values alignment (ALL markets — every cover letter):
+#     BEFORE writing Para 3 — determine whether to fetch values:
+#
+#       STEP A — Domain check (gate):
+#         Extract the domain from career_page_url in the job input.
+#         KNOWN THIRD-PARTY ATS DOMAINS (skip fetch if career_page_url matches):
+#           greenhouse.io, lever.co, workday.com, myworkdayjobs.com, ashbyhq.com,
+#           workable.com, smartrecruiters.com, taleo.net, icims.com, jobvite.com,
+#           recruitee.com, bamboohr.com, teamtailor.com, linkedin.com
+#         Also skip if:
+#           - career_page_url is empty/null (no URL provided)
+#           - is_easy_apply = true (LinkedIn Easy Apply — no company domain)
+#           - The URL domain does not contain the company name or a recognisable brand
+#             subdomain (e.g. "jobs.sonos.com" is fine; "jobs.lever.co/sonos" is not)
+#         If skip condition is met: write to meta.json:
+#           { "attempted": false, "result": "skipped_no_company_domain", "values_found": [] }
+#         Then proceed to Para 3 WITHOUT a values-alignment sentence. Do not guess.
+#
+#       STEP B — Fetch (only if domain check passes):
+#         WebFetch <company-domain>/careers, /about, /values, or /culture — one attempt only.
+#         Use the company's OWN domain derived from career_page_url (not a web search).
+#         Write to meta.json:
+#           { "attempted": true, "result": "success" | "failed",
+#             "values_found": ["value1", "value2", ...] }
+#         If fetch fails: result="failed", values_found=[] → skip sentence, proceed without.
+#
+#     THEN in Para 3 Part A (only when values_fetch.result = "success"):
+#       1. Select the 1–2 company values most strongly evidenced by the candidate's work history.
+#       2. Weave ONE values-alignment sentence into Part A (~20 words):
+#            "[Company] values [X] — in my work at [Employer], I [specific action + metric]."
+#       3. Draw from the FULL work history (all employers in experience_bank.md) —
+#          pick the employer and bullet that best demonstrates the specific value.
+#       4. Do NOT fabricate company values — only use what is verifiably stated on their site.
+#
+#   GOVERNANCE / CAPABILITY-BUILDING SIGNAL (ALL markets — trigger: JD contains ANY of):
+#     "center of excellence", "CoE", "data governance", "data literacy",
+#     "data democratization", "analytics capability", "data maturity",
+#     "AI workflow integration", "analytics pods", "cross-functional pods":
+#
+#     Include ONE sentence (~20 words) in Part A framing the candidate as a structure-builder.
+#     Draw from experience_bank.md — pick the employer with the strongest team leadership
+#     and capability-building bullets that overlap with the JD signal.
+#     Pick whichever has stronger JD keyword overlap.
+#     Example framing (do NOT copy verbatim — synthesize from actual bullets):
+#       "I've built analytics capability from the ground up — structuring cross-functional
+#        pods, embedding data literacy across operations, and developing high-impact analysts."
+#     NEVER fabricate formal CoE programmes, governance frameworks, or org initiatives
+#     not grounded in experience_bank.md bullets.
+#     Placement: after values-alignment sentence (if present), before the AI closer.
+#     The AI closer (Part B) remains ALWAYS last — never displaced by this sentence.
+#
+# PARAGRAPH 4 — Determined by role_type (read para4_instructions field)
+# ─────────────────────────────────────────────────────────────────────────────
+# When auto_prep.py output (auto_cover_<id>.json) is available, the cover JSON
+# contains a `para4_instructions` field. READ IT and follow those instructions
+# exactly for Para 4. Do NOT infer the role type from context — the field is
+# authoritative and was set deterministically by auto_prep.py from role_type.
+#
+# When cover JSON is NOT available (manual / standalone use):
 #   - Always written fresh — never from the bank
 #   - What specifically excites you about THIS company's mission or product
 #   - 1 concrete thing you would want to work on or improve
 #   - Professional closing + invitation to discuss
 #   - Do not be generic — reference something real about the company
+#   - For contract_remote: EOR framing (see _PARA4_INSTRUCTIONS in auto_prep.py)
+#   - For permanent roles: market-specific relocation + visa sentence (see below)
+#
+# ── REMOTE-ONLY / PERMANENT_REMOTE ROLES ──────────────────────────────────────
+# (role_type=permanent_remote — work_mode="Remote" OR is_remote_only=true)
+# Remote companies do NOT expect the candidate to relocate — frame around remote
+# readiness, NOT around visa/relocation logistics as a company obligation.
+#
+# Para 3 — add one subtle sentence (Part A or before the AI closer):
+#   "I am fully set up to contribute remotely from day one, with experience
+#    working across distributed teams spanning multiple time zones."
+#
+# Para 4 — add as an aspirational close (after the CTA, not the main focus):
+#   For EU markets (nl/de/dk/ie/se): express personal desire to relocate and
+#   pursue the relevant permit independently — keep it aspirational, not transactional.
+#   Example: "I am also personally keen to relocate to [country] in the future and
+#   would pursue the [EU Blue Card / Kennismigrant / Pay Limit Scheme / CSEP] route
+#   independently when the opportunity arises."
+#   For UK: omit the relocation sentence for remote roles (the Skilled Worker Visa
+#   requires employer sponsorship at point of employment — mentioning it adds friction
+#   where the company is not expecting to sponsor).
+#
+# ── CONTRACT_REMOTE ROLES (role_type=contract_remote) ─────────────────────────
+# Para 4 MUST use EOR framing (from para4_instructions field):
+#   (1) Immediate availability as remote contractor via EOR (Deel or Remote.com)
+#   (2) 6+ daily hours UK/CET overlap
+#   (3) One JD-specific company excitement sentence
+#   (4) Call to action
+# NEVER mention visa sponsorship, relocation, or right to work in Para 4.
+# ─────────────────────────────────────────────────────────────────────────────
 #
 # CLOSING FORMAT:
 #   "Kind regards,"
 #   [blank line]
-#   "Vinay Patidar"
-#   "+91 XXXXX XXXXX"
-#   "vinay_patidar02@yahoo.com"
+#   "[YOUR_NAME]"
+#   "[YOUR_PHONE]"
+#   "[YOUR_EMAIL]"
+#   (use contact info from candidate_profile.json → contact)
 
 # ── OUTPUT ───────────────────────────────────────────────────
 # Return a JSON object ready to pass to scripts/pdf_renderer.py:
 # {
-#   "name": "Vinay Patidar",
+#   "name": "[candidate name from candidate_profile.json → contact.name]",
 #   "title_lines": <same as tailored_resume.title_lines>,
 #   "contact": <same as tailored_resume.contact>,
 #   "core_expertise": [],   ← empty for cover letter sidebar
 #   "skills": [],           ← empty for cover letter sidebar
 #   "date": "<City>, <today YYYY-MM-DD>",
-#           where City = "London" (market=uk) | "Amsterdam" (market=nl) | "Stockholm" (market=se)
+#           where City = job's own city (normalised); fallback: Amsterdam (NL), Stockholm (SE), Berlin (DE), Copenhagen (DK), Dublin (IE), London (UK)
 #   "recipient": "<Company Name> Hiring Team",
 #   "salutation": "Dear Hiring Team,",
 #   "paragraphs": [
@@ -128,8 +219,24 @@
 # ── MARKET-SPECIFIC ADJUSTMENTS ─────────────────────────────
 # Apply ONLY when market ≠ "uk". Read the market field from the input.
 #
+# ALL non-UK markets — relocation de-risking (add alongside the permit sentence):
+#   If you have prior international relocation experience, reference it here.
+#   One clause or short sentence, woven naturally into Para 4. Example:
+#   "Having previously relocated internationally for [duration] with [Company],
+#    I am confident settling into a new market quickly."
+#   This converts "relocation risk" into "proven relocator".
+#   FRAMING RULE: always anchor any overseas stint inside the longer employer tenure —
+#   never present it as a standalone short job.
+#   Draw from experience_bank.md — use only verified facts about your relocation.
+#
+# DATE LINE (all markets): the JOB's own city + date, e.g. "Utrecht, YYYY-MM-DD"
+#   for a Utrecht job. Anchor city (NL=Amsterdam, SE=Stockholm, DE=Berlin,
+#   DK=Copenhagen, IE=Dublin, UK=London) is the fallback ONLY when the job
+#   location is unknown. auto_prep.py derives this automatically from the
+#   tracker location field.
+#
 # NL (market="nl"):
-#   Date line: "Amsterdam, YYYY-MM-DD"
+#   Date line: job city, e.g. "Amsterdam, YYYY-MM-DD" / "Utrecht, YYYY-MM-DD"
 #   Para 4:    Add one sentence after the forward-looking content (before closing):
 #     "I am actively pursuing a Dutch Highly Skilled Migrant (kennismigrant) permit
 #      and am excited to relocate to Amsterdam — this role meets the IND eligibility
@@ -139,7 +246,7 @@
 #   Spelling:  UK English throughout (organisation, optimisation, behaviour).
 #
 # SE (market="se"):
-#   Date line: "Stockholm, YYYY-MM-DD"
+#   Date line: job city, e.g. "Stockholm, YYYY-MM-DD" / "Gothenburg, YYYY-MM-DD"
 #   Para 4:    Add one sentence after the forward-looking content (before closing):
 #     "I am committed to relocating to Stockholm and plan to apply for a Swedish
 #      work permit (arbetstillstånd) — the role meets the ILO salary requirements
@@ -148,6 +255,66 @@
 #              reference leadership bullets, frame as "leading a team to achieve X"
 #              rather than just "led a team". Consensus-building resonates.
 #   Spelling:  UK English throughout.
+#
+# DE (market="de"):
+#   Date line: job city, e.g. "Berlin, YYYY-MM-DD" / "Munich, YYYY-MM-DD"
+#   Para 4:    Add one sentence after the forward-looking content (before closing):
+#     "I am prepared to relocate to Berlin and would apply for an EU Blue Card
+#      (Blaue Karte EU) upon receiving a formal offer — my [YOUR_DEGREE] and
+#      this role's seniority tier meet the permit eligibility criteria."
+#     (Replace [YOUR_DEGREE] with your actual degree from candidate_profile.json → education[0])
+#     (~30 words, adjust naturally to Para 4 flow)
+#   Tone:      German corporate culture values precision and directness. Outcome
+#              statements should be specific and metric-grounded. Avoid effusive
+#              or overly warm phrasing ("I would be honoured to...").
+#   Spelling:  UK English throughout.
+#
+# DK (market="dk"):
+#   Date line: job city, e.g. "Copenhagen, YYYY-MM-DD" / "Aarhus, YYYY-MM-DD"
+#   Para 4:    Add one sentence after the forward-looking content (before closing):
+#     "I am committed to relocating to Copenhagen and would apply for a Danish work
+#      and residence permit under the Pay Limit Scheme upon receiving an offer —
+#      this role's salary level meets the scheme's eligibility threshold."
+#     (~30 words, adjust naturally to Para 4 flow; use the job's own city.)
+#   NEVER mention the EU Blue Card for Denmark — Denmark opted out of the scheme.
+#   Tone:      Danish workplaces value informality with substance — direct,
+#              low-hierarchy phrasing; lead with outcomes, skip formal flourishes.
+#   Spelling:  UK English throughout.
+#
+# IE (market="ie"):
+#   Date line: job city, e.g. "Dublin, YYYY-MM-DD" / "Cork, YYYY-MM-DD"
+#   Para 4:    Add one sentence after the forward-looking content (before closing):
+#     "I am excited to relocate to Dublin and would apply for a Critical Skills
+#      Employment Permit — analytics roles are on Ireland's Critical Skills
+#      Occupations List and this role meets the eligibility criteria."
+#     (~28 words, adjust naturally to Para 4 flow; use the job's own city.)
+#   Tone:      Irish business culture blends warmth with pragmatism — the standard
+#              confident-warm register works; no adjustment needed.
+#   Spelling:  UK English throughout.
+#
+# AE (market="ae"):
+#   Date line: job city, e.g. "Dubai, YYYY-MM-DD" / "Abu Dhabi, YYYY-MM-DD"
+#   Para 4:    Add one sentence after the forward-looking content (before closing):
+#     "I am committed to relocating to Dubai and would complete the UAE employment
+#      visa process promptly upon receiving an offer — I am familiar with the
+#      requirements and ready to proceed without delay."
+#     (~28 words, adjust naturally to Para 4 flow; use the job's own city.)
+#   NOTE: The UAE employment visa is employer-sponsored — framing should be that
+#     the candidate is ready and willing; never imply a candidate-driven path.
+#   Tone:      UAE business culture values directness and efficiency — outcome-first
+#              phrasing. Lead with value delivery, close with practical readiness.
+#   Spelling:  UK English throughout.
+#
+# AE CONSTRAINTS: For NL/SE/DE/DK/IE markets: NEVER reference "UK" as a target country.
+#   For AE: NEVER reference "UK Skilled Worker Visa", "EU Blue Card", "kennismigrant",
+#   or any non-UAE permit. Use "UAE employment visa" / "UAE work permit" only.
+
+# ── BRITISH ENGLISH RULE (all markets) ────────────────────────
+# All generated text must use British English spellings throughout.
+# Correct forms: optimisation, modelling, behavioural, prioritise, analyse,
+#   organise, utilise, visualise, standardise, centralise.
+# American variants (optimization, modeling, behavioral, prioritize, analyze,
+#   organize, utilize, visualize) must NEVER appear in any cover letter.
 
 # ── CONSTRAINTS ───────────────────────────────────────────────
 # NEVER open with a generic sentence. Company name must appear in sentence 1.
@@ -155,8 +322,11 @@
 # NEVER claim direct MMM/MTA delivery experience.
 # NEVER use the same opening verb/phrase as another cover letter — vary them.
 # Use UK English spelling throughout (organisation, optimisation, behaviour).
-# For NL/SE markets: NEVER reference "UK" as a target country, "right to work in the UK",
-#   "Skilled Worker Visa", or any UK-market context. The candidate is targeting NL/SE only.
+# For NL/SE/DE/DK/IE/AE markets: NEVER reference "UK" as a target country, "right to work in
+#   the UK", "Skilled Worker Visa", or any UK-market context. Each market uses ONLY its own
+#   permit language: NL=kennismigrant, SE=arbetstillstånd, DE=EU Blue Card,
+#   DK=Pay Limit Scheme (never Blue Card), IE=Critical Skills Employment Permit,
+#   AE=UAE Employment Visa / Work Permit (never EU Blue Card or kennismigrant).
 #
 # AI PROJECT FRAMING RULE:
 # NEVER use terms that reveal the application domain of the AI Engineering Project:

@@ -96,7 +96,7 @@ def _overlap_matrix(label_urls: dict, issues: list, source_tag: str,
                     high_pct: int = 20):
     """
     Print keyword overlap matrix + unique-contribution summary.
-    label_urls: {label: set_of_job_urls}
+    label_urls: {label: set_of_job_ids}
     """
     active = {k: v for k, v in label_urls.items() if v}
     if len(active) < 2:
@@ -210,7 +210,7 @@ def analyze_apify(issues: list) -> tuple[int, dict]:
         req_max = d.get("requested_max") or 0
         total_raw += raw
 
-        label_urls[label] = {j.get("job_url") for j in results if j.get("job_url")}
+        label_urls[label] = {str(j["job_id"]) for j in results if j.get("job_id")}
 
         blocked = sum(
             1 for j in results
@@ -248,7 +248,7 @@ def analyze_apify(issues: list) -> tuple[int, dict]:
 
     # ── Overlap matrix ─────────────────────────────────────────────────────────
     print()
-    print("  Keyword Overlap  (% of row-keyword URLs also present in column-keyword)")
+    print("  Keyword Overlap  (% of row-keyword job IDs also present in column-keyword)")
     _divider(78)
     _overlap_matrix(label_urls, issues, "Apify", high_pct=20)
 
@@ -301,8 +301,9 @@ def analyze_adzuna(issues: list) -> tuple[int, dict]:
         total_raw += raw
 
         label_urls[keyword] = {
-            j.get("redirect_url") or j.get("job_url", "")
-            for j in results if j.get("redirect_url") or j.get("job_url")
+            str(j["job_id"]) if j.get("job_id")
+            else (j.get("redirect_url") or j.get("job_url", ""))
+            for j in results if j.get("job_id") or j.get("redirect_url") or j.get("job_url")
         }
 
         filtered = sum(1 for j in results if not _title_is_relevant(j.get("job_title", "")))
@@ -339,7 +340,7 @@ def analyze_adzuna(issues: list) -> tuple[int, dict]:
     active = {k: v for k, v in label_urls.items() if v}
     if len(active) >= 2:
         print()
-        print("  Keyword Overlap  (% of row-keyword URLs also present in column-keyword)")
+        print("  Keyword Overlap  (% of row-keyword job IDs also present in column-keyword)")
         _divider(78)
         _overlap_matrix(active, issues, "Adzuna", high_pct=20)
 
@@ -367,14 +368,23 @@ def analyze_pipeline(source: str, issues: list):
     adzuna_jobs = [j for j in jobs if _src(j) == "adzuna"]
 
     def _split(job_list):
+        is_rescored   = lambda j: j.get("_match_decision") == "update_in_place"
+        is_brand_new  = lambda j: j.get("_match_decision") == "no_match"
+        is_reposted   = lambda j: j.get("_match_decision") == "new_entry"
+        def _sl(status):   return lambda j: j.get("status") == status
         return {
-            "shortlisted":   [j for j in job_list if j.get("status") == "Shortlisted"],
-            "review_needed": [j for j in job_list if j.get("status") == "Review Needed"],
-            "stale":         [j for j in job_list if j.get("status") == "Stale"],
-            "new_entries":   [j for j in job_list
-                              if j.get("_match_decision") in ("no_match", "new_entry")],
-            "rescored":      [j for j in job_list
-                              if j.get("_match_decision") == "update_in_place"],
+            "shortlisted":              [j for j in job_list if _sl("Shortlisted")(j)],
+            "shortlisted_brand_new":    [j for j in job_list if _sl("Shortlisted")(j) and is_brand_new(j)],
+            "shortlisted_reposted":     [j for j in job_list if _sl("Shortlisted")(j) and is_reposted(j)],
+            "shortlisted_rescored":     [j for j in job_list if _sl("Shortlisted")(j) and is_rescored(j)],
+            "review_needed":            [j for j in job_list if _sl("Review Needed")(j)],
+            "review_brand_new":         [j for j in job_list if _sl("Review Needed")(j) and is_brand_new(j)],
+            "review_reposted":          [j for j in job_list if _sl("Review Needed")(j) and is_reposted(j)],
+            "review_rescored":          [j for j in job_list if _sl("Review Needed")(j) and is_rescored(j)],
+            "stale":                    [j for j in job_list if _sl("Stale")(j)],
+            "new_entries":              [j for j in job_list
+                                         if j.get("_match_decision") in ("no_match", "new_entry")],
+            "rescored":                 [j for j in job_list if is_rescored(j)],
         }
 
     ac = _split(apify_jobs)
@@ -479,19 +489,39 @@ def analyze_pipeline(source: str, issues: list):
                 print(f"  {focus:<30}  {count:>3} rejected")
             _divider(50)
 
-    # ── Shortlisted ───────────────────────────────────────────────────────────
-    shortlisted   = tc["shortlisted"]
-    review_needed = tc["review_needed"]
+    # ── Tracker status lookup (for annotating re-scored / reposted entries) ─────
+    tracker_path = ROOT / "data" / "job_tracker.json"
+    _tracker_raw = json.loads(tracker_path.read_text()) if tracker_path.exists() else {}
+    tracker_status_map = {e["id"]: e.get("status", "?")
+                          for e in _tracker_raw.get("applications", [])}
+    # Add auto_rejected entries (always terminal — shown as "auto-rejected")
+    _ar_data = _load_json(ROOT / "data" / "auto_rejected.json") or {}
+    prev_status_map = dict(tracker_status_map)
+    for _r in _ar_data.get("auto_rejected", []):
+        if _r.get("id"):
+            prev_status_map[_r["id"]] = "auto-rejected"
+
+    # ── Shortlisted / Review buckets ─────────────────────────────────────────
+    shortlisted_brand_new  = tc["shortlisted_brand_new"]
+    shortlisted_reposted   = tc["shortlisted_reposted"]
+    shortlisted_rescored   = tc["shortlisted_rescored"]
+    review_brand_new       = tc["review_brand_new"]
+    review_reposted        = tc["review_reposted"]
+    review_rescored        = tc["review_rescored"]
 
     def _sort_key(j):
         score_obj = j.get("score") or {}
         bd        = score_obj.get("fit_score_breakdown") or {}
         return (-(bd.get("role_title") or 0), -(score_obj.get("fit_score") or 0))
 
-    shortlisted.sort(key=_sort_key)
-    review_needed.sort(key=_sort_key)
+    shortlisted_brand_new.sort(key=_sort_key)
+    shortlisted_reposted.sort(key=_sort_key)
+    shortlisted_rescored.sort(key=_sort_key)
+    review_brand_new.sort(key=_sort_key)
+    review_reposted.sort(key=_sort_key)
+    review_rescored.sort(key=_sort_key)
 
-    def _results_table(job_list, header):
+    def _results_table(job_list, header, tracker_status_map=None):
         if not job_list:
             print(f"\n  {header}: (none)")
             return
@@ -502,17 +532,25 @@ def analyze_pipeline(source: str, issues: list):
 
         def _print_rows(sub_list):
             for j in sub_list:
-                score_obj = j.get("score") or {}
-                bd        = score_obj.get("fit_score_breakdown") or {}
-                fit       = score_obj.get("fit_score") or 0
-                tier      = _title_tier_label(bd.get("role_title"))
-                company   = (j.get("_resolved_company")
-                             or (j.get("job") or {}).get("company_name", "?"))
-                role      = (j.get("job") or {}).get("job_title", "?")
-                src       = (j.get("job") or {}).get("_source", "?")[:3].upper()
-                company_t = company[:27] + "…" if len(company) > 28 else company
-                role_t    = role[:47] + "…" if len(role) > 48 else role
-                print(f"  {fit:>5}  {tier:<6}  {src:<5}  {company_t:<28}  {role_t}")
+                score_obj  = j.get("score") or {}
+                bd         = score_obj.get("fit_score_breakdown") or {}
+                fit        = score_obj.get("fit_score") or 0
+                tier       = _title_tier_label(bd.get("role_title"))
+                company    = (j.get("_resolved_company")
+                              or (j.get("job") or {}).get("company_name", "?"))
+                role       = (j.get("job") or {}).get("job_title", "?")
+                src        = (j.get("job") or {}).get("_source", "?")[:3].upper()
+                company_t  = company[:27] + "…" if len(company) > 28 else company
+                # Annotate re-scored entries with their current tracker status
+                if tracker_status_map is not None:
+                    matched_id     = j.get("_matched_id", "")
+                    current_status = tracker_status_map.get(matched_id, "?")
+                    annotation     = f"  [{current_status} → {matched_id}]"
+                    role_t = role[:33] + "…" if len(role) > 34 else role
+                    print(f"  {fit:>5}  {tier:<6}  {src:<5}  {company_t:<28}  {role_t}{annotation}")
+                else:
+                    role_t = role[:47] + "…" if len(role) > 48 else role
+                    print(f"  {fit:>5}  {tier:<6}  {src:<5}  {company_t:<28}  {role_t}")
 
         apify_list  = [j for j in job_list if (j.get("job") or {}).get("_source") == "apify"]
         adzuna_list = [j for j in job_list if (j.get("job") or {}).get("_source") == "adzuna"]
@@ -532,8 +570,20 @@ def analyze_pipeline(source: str, issues: list):
         _divider(90)
 
     print()
-    _results_table(shortlisted,   "SHORTLISTED")
-    _results_table(review_needed, "REVIEW NEEDED")
+    _results_table(shortlisted_brand_new, "SHORTLISTED  — New")
+    if shortlisted_reposted:
+        _results_table(shortlisted_reposted, "SHORTLISTED  — Reposted (prev. rejected/stale)",
+                       tracker_status_map=prev_status_map)
+    if shortlisted_rescored:
+        _results_table(shortlisted_rescored, "SHORTLISTED  — Already Tracked (re-scored)",
+                       tracker_status_map=tracker_status_map)
+    _results_table(review_brand_new, "REVIEW NEEDED — New")
+    if review_reposted:
+        _results_table(review_reposted, "REVIEW NEEDED — Reposted (prev. rejected/stale)",
+                       tracker_status_map=prev_status_map)
+    if review_rescored:
+        _results_table(review_rescored, "REVIEW NEEDED — Already Tracked (re-scored)",
+                       tracker_status_map=tracker_status_map)
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
@@ -561,6 +611,10 @@ def main():
 
     analyze_pipeline(source, issues)
 
+    _print_role_type_distribution()
+
+    _print_position_distribution()
+
     print(f"\n┌─ ISSUES {'─' * 69}┐")
     if issues:
         for issue in issues:
@@ -570,6 +624,111 @@ def main():
     print(f"└{'─' * 79}┘\n")
 
     sys.exit(0)
+
+
+def _print_role_type_distribution():
+    """Role type + EOR viability breakdown for entries added today."""
+    today = str(date.today())
+    try:
+        tracker = json.load(open(ROOT / "data" / "job_tracker.json")).get("applications", [])
+    except Exception:
+        return
+
+    today_entries = [
+        e for e in tracker
+        if e.get("latest_scoring_date") == today
+        and e.get("status") in ("Shortlisted", "Review Needed", "Auto-Rejected")
+    ]
+    if not today_entries:
+        return
+
+    _RT_LABELS = ("contract_remote", "contract_hybrid", "permanent_remote", "permanent_hybrid")
+    rt_counts = {rt: 0 for rt in _RT_LABELS}
+    rt_counts["unknown"] = 0
+    eor_high = eor_med = eor_low = 0
+
+    for e in today_entries:
+        rt = e.get("role_type") or "unknown"
+        if rt in rt_counts:
+            rt_counts[rt] += 1
+        else:
+            rt_counts["unknown"] += 1
+        ev = e.get("eor_viability")
+        if isinstance(ev, int):
+            if ev >= 8:
+                eor_high += 1
+            elif ev >= 5:
+                eor_med += 1
+            else:
+                eor_low += 1
+
+    contract_total = rt_counts["contract_remote"] + rt_counts["contract_hybrid"]
+    if contract_total == 0:
+        return  # no contract entries today — skip section
+
+    total = len(today_entries)
+    print("\n┌─ ROLE TYPE DISTRIBUTION ────────────────────────────────────────────────┐")
+    print("│  Qualified entries from today's scout (Shortlisted + Review + Rejected) │")
+    print("└─────────────────────────────────────────────────────────────────────────┘")
+    for rt, count in rt_counts.items():
+        if count == 0:
+            continue
+        pct = count / total * 100
+        print(f"  {rt:<22}  {count:>4}  ({pct:>4.0f}%)")
+    print()
+    print(f"  EOR Viability (contract roles only — {contract_total} entries):")
+    print(f"    High  (8–10): {eor_high}   Medium (5–7): {eor_med}   Low (1–4): {eor_low}")
+    print()
+
+
+def _print_position_distribution():
+    """Histogram of scrape positions for qualified (Shortlisted + Review Needed) entries added today."""
+    today = str(date.today())
+    try:
+        tracker = json.load(open(ROOT / "data" / "job_tracker.json")).get("applications", [])
+    except Exception:
+        return
+
+    qualified = [
+        e for e in tracker
+        if e.get("scrape_position") is not None
+        and e.get("latest_scoring_date") == today
+        and e.get("status") in ("Shortlisted", "Review Needed")
+    ]
+    if not qualified:
+        return
+
+    buckets = {f"{i+1}–{i+10}": 0 for i in range(0, 100, 10)}
+    for e in qualified:
+        pos = e["scrape_position"]
+        bucket = f"{((pos - 1) // 10) * 10 + 1}–{((pos - 1) // 10) * 10 + 10}"
+        if bucket in buckets:
+            buckets[bucket] += 1
+
+    total = len(qualified)
+    in_first_half = sum(v for k, v in buckets.items() if int(k.split("–")[0]) <= 50)
+
+    print("\n┌─ SCRAPE POSITION DISTRIBUTION ──────────────────────────────────────────┐")
+    print("│  Where did qualified jobs (Shortlisted + Review Needed) fall today?    │")
+    print("└─────────────────────────────────────────────────────────────────────────┘")
+    max_count = max(buckets.values()) or 1
+    bar_width  = 30
+    print(f"  {'Pos bucket':<12} {'Count':>5}  Bar")
+    for bucket, count in buckets.items():
+        bar = "█" * int(count / max_count * bar_width)
+        print(f"  {bucket:<12} {count:>5}  {bar}")
+    print(f"  {'─' * 50}")
+    pct_first = in_first_half / total * 100 if total else 0
+    pct_second = (total - in_first_half) / total * 100 if total else 0
+    print(f"  Positions  1–50:  {in_first_half:>3}/{total}  ({pct_first:.0f}%)")
+    print(f"  Positions 51–100: {total - in_first_half:>3}/{total}  ({pct_second:.0f}%)")
+    if pct_first >= 90:
+        rec = "✓ Safe to reduce max_jobs to 50"
+    elif pct_first >= 70:
+        rec = "⚠ Review before reducing — some qualified jobs beyond pos 50"
+    else:
+        rec = "✗ Keep max_jobs at 100 — significant qualified jobs beyond pos 50"
+    print(f"  Recommendation: {rec}")
 
 
 if __name__ == "__main__":
