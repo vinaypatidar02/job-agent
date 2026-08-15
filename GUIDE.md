@@ -135,7 +135,7 @@ Key validation checks:
 | V18 | No third-person pronouns ("his", "her", "their") | No — always active; catches LLM drift |
 | V23 | Cover letter word count within 350–450 words | No — always active |
 
-**Note on V13 (British English):** If you are targeting US or Australian markets, open `scripts/validate_prep.py`, find the `_check_v13` function, and comment it out. American spellings ("optimize", "behavior", "analyze") will no longer trigger a FAIL.
+**Note on V13 (British English):** If you are targeting US or Australian markets, say in Claude Code: *"disable British English validation — I'm targeting US roles"*. American spellings ("optimize", "behavior", "analyze") will no longer trigger a FAIL.
 
 #### Layer 3 — Metric Preservation
 
@@ -143,19 +143,7 @@ Exact metric strings (e.g. `"improved conversion by 18%"`) must appear verbatim 
 
 #### Adding Your Own Checks (V24+)
 
-```python
-# In scripts/validate_prep.py — add below the last _check_vN function:
-def _check_v24(resume_data: dict, cover_data: dict, meta: dict) -> list[str]:
-    """V24: Describe what this check validates."""
-    issues = []
-    # Your logic here — return a non-empty list if the check fails
-    if some_condition_fails:
-        issues.append("V24 FAIL: description of the problem")
-    return issues
-
-# Then register it in the ALL_CHECKS list at the bottom of the file:
-ALL_CHECKS = [...existing_checks..., _check_v24]
-```
+Say in Claude Code: *"add a validation check that blocks any cover letter that doesn't mention experimentation"* — Claude adds the check to `scripts/validate_prep.py` and registers it automatically.
 
 ---
 
@@ -260,8 +248,9 @@ pip install -r requirements.txt
 
 ```bash
 cp .env.example .env
-nano .env    # or open in any editor
 ```
+
+The setup wizard (Step 3 below) prompts for each key in turn — copy-paste from your service dashboard when asked. No manual file editing required.
 
 **Required variables:**
 
@@ -282,79 +271,45 @@ nano .env    # or open in any editor
 
 ---
 
-### Step 3: Fill candidate_profile.json
+### Step 3: Run the Setup Wizard
 
-This is the **single config file** for all your personal details. Open:
-```
-data/content/candidate_profile.json
-```
-
-**Minimum required fields for a first run:**
-
-```json
-{
-  "contact": {
-    "name": "Your Full Name",
-    "email": "you@example.com",
-    "phone": "+1 234 567 8900",
-    "linkedin": "linkedin.com/in/your-name",
-    "address": "Your City, Country"
-  },
-  "profile": {
-    "years_of_experience": 8,
-    "target_roles": ["Your Target Role 1", "Your Target Role 2"]
-  },
-  "core_skills": {
-    "skills": ["Python", "SQL", "Your Tool 3"]
-  },
-  "experience": [
-    {
-      "company": "Most Recent Company",
-      "role": "Your Job Title",
-      "dates": "2022-06–present",
-      "bank_key": "Most Recent Company",
-      "max_bullets": 5
-    }
-  ],
-  "has_right_to_work": {
-    "markets": []
-  }
-}
+```bash
+python3 scripts/setup_wizard.py
 ```
 
-`has_right_to_work.markets` — list market codes where you already have the right to work (e.g. `["uk"]`). For those markets, visa sponsorship checks are skipped. Leave empty if you need sponsorship everywhere.
+The wizard fills every required field interactively — name, contact details, target roles, skills, experience companies, salary thresholds, LinkedIn search URLs, and scoring rubric. It also offers to parse your existing CV to bootstrap your experience bullets.
 
-See `CONFIGURATION.md` for all available fields and their effects on scoring, PDF layout, and validation.
+After setup, update any field at any time by saying in Claude Code:
+- *"set my target roles to Analytics Manager and Data Lead"*
+- *"add Python and dbt to my core skills"*
+- *"set my years of experience to 10"*
+- *"I now have the right to work in the UK — add uk to my right-to-work markets"*
+
+See `CONFIGURATION.md` for a full reference of available fields.
 
 ---
 
-### Step 4: Write experience_bank.md
+### Step 4: Add Your Experience Bullets
 
 `data/content/experience_bank.md` is where **all resume bullets come from**. The pipeline selects from this file — it never generates new content.
 
-**Option A — AI bootstrap from your existing CV (recommended):**
-setup_wizard.py Step 3 now offers to parse your existing CV. When prompted:
+**AI bootstrap from your existing CV (handled by setup_wizard.py Step 3):**
+When prompted by the wizard:
 1. Provide a file path to your PDF or .txt CV, or paste the text directly
-2. Claude Haiku parses it into the correct experience_bank.md format with domain tags
-3. Review the output — verify metrics, adjust tags, remove any parsing errors
+2. Claude Haiku parses it into the correct format with domain tags automatically
+3. The wizard shows the output — verify metrics are correct, then continue
 
-**Option B — Write manually:**
+**Adding bullets after setup:**
 
-```markdown
-## Company Name    ← must match bank_key in candidate_profile.json
+Say in Claude Code at any time:
+- *"add a bullet for [Company]: improved checkout conversion by 18% by redesigning the payment flow"*
+- *"add three leadership bullets for [Company] about managing a team of 5 analysts"*
+- *"remove the bullet about [topic] from [Company] — I can't defend it in interviews"*
 
-Your Job Title | 2022-06–present
-
-• [tag] Action verb + context + specific, verifiable metric
-• [tag] Another achievement with a measurable outcome
-• [tag] Leadership, mentoring, or strategic contribution
-```
-
-**Rules (apply to both options):**
+**Rules:**
 - Only include achievements you can defend in an interview
-- Tags must match keywords in your `candidate_profile.json → domains` section
 - Aim for 6–10 bullets per role — the pipeline selects the most relevant ones per job
-- Metric strings must be exact (e.g. `"improved conversion by 18%"`) — V7 validation checks these
+- Metric strings must be exact — V7 validation checks these
 
 ---
 
@@ -366,34 +321,10 @@ The wizard builds search URLs interactively — you choose keywords, market, dat
 
 **LinkedIn date filter note:** LinkedIn only supports three date windows — Past 24 hours, Past week, and Past month. Custom date ranges are not available via the API.
 
-**To add searches after setup:** edit `data/content/search_config.json` directly:
-
-```json
-{
-  "searches": [
-    {
-      "label": "Head of Analytics — UK",
-      "market": "uk",
-      "keywords": "Head of Analytics",
-      "time_window": "r86400",
-      "include_contract": false,
-      "max_jobs": 100
-    }
-  ]
-}
-```
-
-**Market geoIds (for reference — wizard fills these automatically):**
-
-| Market | geoId |
-|--------|-------|
-| United Kingdom | `101165590` |
-| Netherlands | `102890719` |
-| Germany | `101282230` |
-| Denmark | `104514075` |
-| Ireland | `104738515` |
-| Sweden | `105117694` |
-| UAE | `104305776` |
+**To add searches after setup**, say in Claude Code:
+- *"add a LinkedIn search for 'Head of Analytics' in UK, past week"*
+- *"add a contract search for 'Data Lead' in Netherlands"*
+- *"remove the search labelled 'Analytics Manager — DE'"*
 
 See `CONFIGURATION.md §5` for advanced URL parameters and filter reliability notes.
 
@@ -405,41 +336,27 @@ See `CONFIGURATION.md §5` for advanced URL parameters and filter reliability no
 
 The wizard prompts for a minimum annual salary per market and writes to `candidate_profile.json → salary_thresholds`. No Python editing required.
 
-**To edit directly** after setup:
-```json
-{
-  "salary_thresholds": {
-    "uk": 80000,
-    "nl": 90000,
-    "de": 90000,
-    "dk": 700000,
-    "ie": 90000,
-    "se": 800000,
-    "ae": 360000
-  }
-}
-```
+**To update after setup**, say in Claude Code:
+- *"update my UK salary threshold to £85,000"*
+- *"set the Netherlands threshold to €95,000"*
 
 Jobs with a stated salary below your threshold are auto-rejected by Pass 1. Jobs with no stated salary are flagged as `salary_gate = "tbc"` and passed through for human review. Remote/contract roles are screened at 80% of the threshold automatically.
 
 ---
 
-### Step 7: Configure score_jobs.py Filters
+### Step 7: Tune Filters After Your First Run
 
-Open `scripts/score_jobs.py` and locate the `# ── USER CONFIG ──` block near the top of the file.
+For your first run, defaults are fine. After reviewing results, tune filters by saying in Claude Code:
 
-Key settings for your first run:
+| What you want | Say in Claude Code |
+|---------------|-------------------|
+| Block junior roles | *"add 'intern' and 'junior' to my title blocklist"* |
+| Block consulting firms | *"block companies with 'staffing' or 'recruitment' in their name"* |
+| Restrict a market to top brands | *"only allow Spotify, Klarna, and Ericsson for Sweden"* |
+| Raise the shortlist bar | *"raise the shortlist threshold to 80"* |
+| Target specific title keywords | *"add 'analytics' and 'insights' to my target title keywords"* |
 
-| Variable | Default | What it does |
-|----------|---------|--------------|
-| `TARGET_TITLE_KEYWORDS` | `set()` | Keywords present in your target job titles — used for stale-post classification |
-| `TITLE_REJECT_CONTAINS` | `[]` | Substrings that auto-reject a job title (e.g. `["intern", "junior"]`) |
-| `_MARKET_BRAND_ALLOWLIST` | `{}` | If set, only jobs from listed companies pass in that market |
-| `_CONSULTING_BLOCKLIST_SUBSTRINGS` | `set()` | Company name substrings to block (e.g. consulting firms you don't want) |
-
-**For your first run:** leave `TITLE_REJECT_CONTAINS` as `[]` and `_MARKET_BRAND_ALLOWLIST` as `{}`. Add patterns after reviewing your first results.
-
-See `CONFIGURATION.md §6` for all USER CONFIG options and their interactions.
+See `CONFIGURATION.md §6` for all configurable filter options.
 
 ---
 
@@ -453,9 +370,12 @@ The wizard's scoring rubric builder asks structured questions and generates the 
 - Core skills to match against
 - Target UK cities with location scores (other markets are pre-configured)
 
-**To edit after wizard generation:** open `docs/fit-scoring-rubric.md` directly — it's a plain text file. Claude reads it at every session start via `CLAUDE.md @docs/fit-scoring-rubric.md`.
+**To tune after wizard generation**, say in Claude Code:
+- *"add 'Head of Analytics' as a Tier 1 title"*
+- *"score fintech companies 25 points in the domain section"*
+- *"lower the location score for Tier 2 cities to 4"*
 
-**This file directly controls which jobs get shortlisted vs. rejected.** An unedited or misconfigured rubric produces poor scoring results — review it after the first scout run.
+**This file directly controls which jobs get shortlisted vs. rejected.** Review your results after the first scout run and ask Claude to tune it if you're seeing too many or too few matches.
 
 ---
 
@@ -471,7 +391,7 @@ Google Sheets acts as a human-readable dashboard where you review shortlisted jo
 
 See `templates/google_sheets_setup.md` for a detailed step-by-step guide.
 
-**Without Google Sheets:** the pipeline still works. All state is in `data/job_tracker.json`. You review and approve jobs by editing that file directly, then running `python3 scripts/sheets_sync.py pull` to apply changes.
+**Without Google Sheets:** the pipeline still works. All state is in `data/job_tracker.json`. Say *"approve job app_001 with ATS URL https://..."* in Claude Code — Claude updates the tracker and you can run prep immediately.
 
 ---
 
@@ -611,122 +531,74 @@ After your first successful scout, tune the pipeline for better results. These a
 
 ### 6a. Scoring Thresholds
 
-In `scripts/score_jobs.py`, find `SHORTLIST_THRESHOLD` and `REVIEW_THRESHOLD`:
+Say in Claude Code:
+- *"raise the shortlist threshold to 80"* — fewer, higher-quality shortlists
+- *"lower the review threshold to 55"* — captures more borderline jobs for human review
+- *"too many wrong jobs are shortlisted — tighten my title and domain scoring"*
 
-```python
-SHORTLIST_THRESHOLD = 75   # ≥ 75 → Shortlisted
-REVIEW_THRESHOLD = 60      # 60–74 → Review Needed; < 60 → Auto-Rejected
-```
-
-- **Too many results?** Raise `SHORTLIST_THRESHOLD` to 80 or 85
-- **Too few results?** Lower `REVIEW_THRESHOLD` to 55, or check your rubric for over-restrictive criteria
-- **Wrong jobs shortlisted?** The issue is usually in `docs/fit-scoring-rubric.md` — tighten your title and domain descriptions
+Default: ≥ 75 → Shortlisted · 60–74 → Review Needed · < 60 → Auto-Rejected
 
 ### 6b. Title Filters
 
-Add patterns to `TITLE_REJECT_CONTAINS` after reviewing your first results:
-
-```python
-TITLE_REJECT_CONTAINS = [
-    "junior",          # too junior
-    "intern",          # internships
-    "graduate",        # entry-level
-    "your_pattern",    # anything noisy you're seeing
-]
-```
-
-Add target title keywords for stale-post classification:
-
-```python
-TARGET_TITLE_KEYWORDS = {
-    "analytics",
-    "your_keyword",
-}
-```
+Say in Claude Code:
+- *"add 'intern', 'junior', and 'graduate' to my title blocklist"*
+- *"add 'analytics' and 'insights' to my target title keywords"*
+- *"remove 'manager' from my title blocklist — I'm seeing too few results"*
 
 ### 6c. Salary Thresholds
 
-Update `SALARY_THRESHOLDS` in `scripts/common.py`. Remote and contract roles use 80% of the market threshold (configurable via `SALARY_THRESHOLDS_REMOTE`):
+Say in Claude Code:
+- *"update my UK salary threshold to £85,000"*
+- *"set the remote/contract threshold for Netherlands to €75,000"*
 
-```python
-SALARY_THRESHOLDS_REMOTE = {k: int(v * 0.8) for k, v in SALARY_THRESHOLDS.items()}
-# Override individually if needed:
-SALARY_THRESHOLDS_REMOTE["uk"] = 70000
-```
+Remote and contract roles are automatically screened at 80% of the standard threshold.
 
 ### 6d. Company Filters
 
-Block entire company types by substring:
-
-```python
-_CONSULTING_BLOCKLIST_SUBSTRINGS = {
-    "staffing",
-    "recruitment",
-    "consulting",   # add patterns relevant to your profession
-}
-```
-
-Restrict a market to specific companies only (e.g. Sweden brand whitelist pattern):
-
-```python
-_MARKET_BRAND_ALLOWLIST = {
-    "se": {"company_a", "company_b"},  # only these pass in SE
-}
-```
+Say in Claude Code:
+- *"block companies with 'staffing', 'recruitment', or 'outsourcing' in their name"*
+- *"only allow Spotify, Klarna, and Ericsson for the Sweden market"*
+- *"remove the consulting firm block — I'm open to consulting roles now"*
 
 ### 6e. Fit Scoring Rubric
 
-`docs/fit-scoring-rubric.md` is injected into every Pass 2 scoring prompt. It defines:
-- Which role titles score 20 / 15 / 10 / 5 / 0 points (title match)
-- Which industries score 25 / 15 / 5 / 0 points (domain match)
-- Which skills are relevant to your profile (skills match)
-- Location scoring tiers per market
+The rubric controls title, domain, skills, location, and visa scoring. Say in Claude Code:
+- *"add 'Head of Data' as a Tier 1 title scoring 20 points"*
+- *"score healthcare companies 15 points in the domain section"*
+- *"I'm no longer targeting UAE — remove it from my location scoring"*
+- *"show me my current scoring rubric"*
 
-Edit this file whenever your target role or market changes. Changes take effect immediately on the next scout run — no code changes needed.
+Changes take effect on the next scout run.
 
 ### 6f. Adding Validation Checks (V24+)
 
-```python
-# In scripts/validate_prep.py:
+Say in Claude Code:
+- *"add a validation check that blocks any cover letter that doesn't mention my Python experience"*
+- *"add a check that fails if the resume is longer than 2 pages"*
+- *"add a check that ensures the company name appears in paragraph 1 of every cover letter"*
 
-def _check_v24(resume_data: dict, cover_data: dict, meta: dict) -> list[str]:
-    """V24: Your custom validation — describe what it checks."""
-    issues = []
-    # Example: ensure a specific section is present
-    if "YOUR_CONDITION" not in str(resume_data):
-        issues.append("V24 FAIL: YOUR_CONDITION not found in resume")
-    return issues  # empty list = pass
-
-# Register at bottom of file in ALL_CHECKS:
-ALL_CHECKS = [
-    _check_v1, _check_v2, ..., _check_v23,
-    _check_v24,   # add here
-]
-```
+Claude adds the check to `scripts/validate_prep.py` and registers it automatically.
 
 ### 6g. Swapping Claude Models
 
-| Use case | Default model | Where to change | Cost tradeoff |
-|----------|--------------|-----------------|---------------|
-| Job scoring (Pass 2) | Haiku 4.5 | `score_jobs.py` `MODEL` constant | Upgrade to Sonnet: ~10× cost, higher nuance |
-| Profile summaries | Haiku 4.5 | `generate_summaries.py` `MODEL` constant | Downgrade saves ~$0 (already cheap) |
-| Cover letters | Sonnet 4.6 | `generate_covers.py` `MODEL` constant | Downgrade to Haiku: ~50% saving, ~30% quality drop |
-| Email classification | Haiku 4.5 | `gmail_backfill.py` `MODEL` constant | Already minimal cost |
+Say in Claude Code:
+- *"use Sonnet for job scoring instead of Haiku — I want higher quality at higher cost"*
+- *"downgrade cover letters to Haiku — save cost, accept some quality drop"*
+- *"what models is the pipeline currently using?"*
 
-Current model IDs: `claude-haiku-4-5-20251001`, `claude-sonnet-4-6`.
+| Use case | Default | Cost tradeoff |
+|----------|---------|---------------|
+| Job scoring (Pass 2) | Haiku 4.5 | Upgrade to Sonnet: ~10× cost, higher nuance |
+| Cover letters | Sonnet 4.6 | Downgrade to Haiku: ~50% saving, ~30% quality drop |
+| Profile summaries | Haiku 4.5 | Already minimal cost |
+| Email classification | Haiku 4.5 | Already minimal cost |
 
 ### 6h. Adding Markets
 
-To add a new geographic market:
+Say in Claude Code:
+*"add France as a new market — market code 'fr', salary threshold €80,000, Tier 1 cities Paris and Lyon, EU Blue Card visa, LinkedIn geoId 105015861"*
 
-1. **`scripts/score_jobs.py`** — add to `_STALE_DAYS_BY_MARKET`, `_location_score()`, and any language gates
-2. **`scripts/run_scout.py`** — add geoId + Apify URL to `SEARCHES_APIFY`
-3. **`scripts/common.py`** — add salary threshold to `SALARY_THRESHOLDS`
-4. **`candidate_profile.json`** — add visa address under `visa_addresses`
-5. **`docs/fit-scoring-rubric.md`** — add city tiers for the new market
-6. **`scripts/check_workflow.py`** — verify new market is recognised in market validation
-
-Test with `--market YOUR_CODE --dry-run` before a live run.
+Claude updates all 5 config locations automatically (scorer, scout, common, candidate profile, rubric). Test with *"run scout for fr dry run"* before spending any credit.
 
 ### 6i. Referral Outreach Workflow
 

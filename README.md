@@ -21,16 +21,16 @@ any profession.
 
 ## Everything Is Customisable
 
-Every behaviour in the pipeline can be changed — no aspect is hardcoded for a specific profession, country, or workflow:
+Every behaviour in the pipeline can be changed through conversation — no file editing, no code changes:
 
-- **New markets in minutes**: add a geoId, salary threshold, city tier scoring, and visa address — 5 config edits, no code change. See GUIDE.md §6g.
-- **Scoring behaviour**: edit `docs/fit-scoring-rubric.md` directly, or just say in Claude Code: *"adjust shortlist threshold to 80"* or *"add a rule that rejects roles without SQL"*
-- **Validation rules**: say *"add a validation check that blocks [condition]"* in Claude Code — new checks are added to `scripts/validate_prep.py` automatically
-- **Title blocklists, language gates, salary thresholds**: all live in `data/content/candidate_profile.json` — edit once, applies everywhere
-- **Automation hooks**: `hooks/` directory controls what runs automatically on job approval or email receipt — edit or disable any hook
-- **Default pipeline behaviour**: `CLAUDE.md` and `agents/*.md` define how Claude interprets your requests — edit these to change how the AI behaves in your project session
+- **New markets**: *"add France as a new market — salary threshold €80,000, Tier 1 cities Paris and Lyon"* — Claude handles all config automatically.
+- **Scoring behaviour**: *"adjust the shortlist threshold to 80"*, *"add a rule that rejects roles without SQL"*, *"score fintech companies 25 points"*
+- **Validation rules**: *"add a validation check that blocks any cover letter that doesn't mention experimentation"*
+- **Title blocklists and salary thresholds**: *"add 'intern' and 'junior' to my title blocklist"*, *"update my UK salary threshold to £85,000"*
+- **Automation hooks**: *"disable the auto-prep hook"*, *"change when referral follow-ups are triggered"*
+- **Pipeline behaviour**: *"use Sonnet for cover letters instead of Haiku"*, *"change how I want remote roles framed in cover letters"*
 
-Claude reads `CLAUDE.md` at session start, so it always knows your full setup. Most customisations can be done conversationally: *"change my target salary for Germany to €95,000"* — no file editing required.
+Claude reads your full setup at session start — preferences, rubric, market config, candidate profile — so every request is context-aware. You describe what you want; Claude makes the change.
 
 ## Architecture
 
@@ -149,9 +149,7 @@ Full cost breakdown with monthly estimates at different usage levels: **GUIDE.md
 | Sweden | Arbetstillstånd |
 | UAE | Employment Visa |
 
-**Adding a new market** is 5 config edits: add a geoId + LinkedIn URL, set a salary threshold,
-define city tier scoring, add a visa address, update the scoring rubric. No code change required
-beyond those config files. See GUIDE.md §6g.
+**Adding a new market**: say *"add [country] as a new market — salary threshold [X], Tier 1 cities [list]"* in Claude Code. Claude handles all config automatically. See GUIDE.md §6g for details.
 
 ## Extend and Customise via Claude Interactions
 
@@ -183,12 +181,13 @@ rubric, market config, and candidate profile — so every interaction is aware o
 
 ## What you need to configure
 
-1. Fill `.env` with your API keys (see `.env.example`)
-2. Fill `data/content/candidate_profile.json` with your personal and professional details (wizard handles steps 1–5)
-3. Write `data/content/experience_bank.md` with your work history and bullet points
-4. Set your salary thresholds in `candidate_profile.json → salary_thresholds` (wizard Step 4 — no code editing)
-5. Configure your LinkedIn searches in `data/content/search_config.json` (wizard Step 5 — builds URLs interactively)
-6. Set your scoring rubric in `docs/fit-scoring-rubric.md` (wizard Step 6 — guided builder)
+Run the setup wizard — it walks you through every field interactively:
+
+```bash
+python3 scripts/setup_wizard.py
+```
+
+The wizard covers: API keys, your profile and skills, experience bullets (with CV bootstrap), LinkedIn search URLs, salary thresholds, and scoring rubric. After that, any change is a conversational command in Claude Code — no file editing required.
 
 Full step-by-step instructions: **GUIDE.md §4** · Customisation options: **GUIDE.md §6**
 

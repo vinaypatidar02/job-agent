@@ -47,7 +47,8 @@
   then run pull → restores to active in job_tracker.json.
 
 [CONTEXT] Email check — uses IMAP (Yahoo by default) via scripts/gmail_backfill.py.
-  Configure IMAP_HOST in gmail_backfill.py USER CONFIG section (Yahoo/Gmail/Outlook).
+  To change provider, say "switch my email provider to Gmail/Outlook/Yahoo" in Claude Code,
+  or re-run setup_wizard.py — it configures the correct host/port automatically.
 
   Translate user prompt → script arg, then run:
     "check email"                → python3 scripts/gmail_backfill.py --days 2
@@ -90,8 +91,8 @@
     Software:  Staff Engineer, Engineering Manager, Principal Engineer
     Finance:   Head of FP&A, Finance Director, VP Finance
 
-[RULE] Salary threshold — configure in CLAUDE.md §3 and score_jobs.py USER CONFIG:
-  Set YOUR_SALARY_THRESHOLD to the minimum annual salary you will accept.
+[RULE] Salary threshold — set via setup_wizard or by saying "update my [market] salary threshold to [amount]" in Claude Code:
+  Minimum annual salary you will accept.
   Salary gate rules:
     - Upper end > threshold → SHORTLIST (even if lower end is below)
     - Both ends < threshold → DO NOT shortlist
@@ -99,12 +100,11 @@
 
 [RULE] Remote-only and contract roles are accepted at 80% of the salary gate.
   is_remote_only and is_contract are informational flags — not hard blockers.
-  Configure SALARY_THRESHOLDS_REMOTE in scripts/common.py.
+  To override remote thresholds: say "set my remote salary threshold for [market] to [amount]".
 
-[CONTEXT] Target locations — configure per market:
+[CONTEXT] Target locations — configured via setup_wizard or by saying "update my preferred cities for [market]" in Claude Code:
   Define your preferred cities by tier (Tier 1 = primary hub, etc.).
   Location scoring (0–10) is defined in docs/fit-scoring-rubric.md.
-  Configure city tier lists at the top of scripts/score_jobs.py (CITY_TIERS dict).
 
 [CONTEXT] Supported markets:
   UK  (--market uk):  United Kingdom — Skilled Worker Visa sponsorship required

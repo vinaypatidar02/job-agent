@@ -20,18 +20,11 @@ Create `.env` from `.env.example`: `cp .env.example .env`
 | `GITHUB_TOKEN` | Yes (for git_sync.py) | github.com/settings/tokens → Generate new token (classic) → repo scope | Used by git_sync.py to push pipeline data. Optional if you push manually. |
 | `GITHUB_REPO` | No | Your repo: `username/repo-name` | Used by monitor_scout.py to show CI run status. Leave blank to disable CI monitoring. |
 
-### IMAP provider configuration (gmail_backfill.py)
+### IMAP provider configuration
 
-The setup wizard Step 1 asks for your email provider and updates `gmail_backfill.py` automatically. To change provider after setup, re-run the wizard or edit the file directly:
+The setup wizard Step 1 asks for your email provider and configures the correct host/port automatically. To change provider after setup, re-run the wizard or say in Claude Code: *"switch my email provider to Gmail"* (or Yahoo / Outlook).
 
-```python
-# Edit in scripts/gmail_backfill.py:
-# Yahoo (default):  IMAP_HOST = "imap.mail.yahoo.com"     IMAP_PORT = 993
-# Gmail:            IMAP_HOST = "imap.gmail.com"           IMAP_PORT = 993
-# Outlook:          IMAP_HOST = "outlook.office365.com"    IMAP_PORT = 993
-```
-
-Yahoo and Gmail are both straightforward. Gmail requires enabling IMAP in Gmail settings and generating an App Password (not your Google password). setup_wizard.py configures the correct host/port automatically.
+Gmail requires enabling IMAP in Gmail settings and generating an App Password (not your Google password) — the wizard explains this when Gmail is selected.
 
 ---
 
@@ -212,12 +205,14 @@ Rules:
 
 ## 4. CLAUDE.md Customisation
 
-| Section | What to edit | What to keep |
-|---------|-------------|-------------|
-| §2 — Candidate Profile | Everything (or edit docs/candidate-profile.md which §2 imports) | — |
-| §3 — Job Search Preferences | Target roles, salary threshold, city tiers, industry preferences | Visa market names |
-| §4 — Fit Scoring Rubric | (edit docs/fit-scoring-rubric.md which §4 imports) | Scoring thresholds (≥75, 60-74, <60) |
-| §5–§13 | Leave as-is | Pipeline rules apply to any profession |
+`CLAUDE.md` is loaded at every Claude Code session start. All sections can be updated conversationally:
+
+| Section | How to update |
+|---------|---------------|
+| §2 — Candidate Profile | *"update my candidate profile — add dbt to my skills"* |
+| §3 — Job Search Preferences | *"set my target roles to …"*, *"update my salary threshold for …"* |
+| §4 — Fit Scoring Rubric | *"add 'Head of Analytics' as a Tier 1 title"*, *"score healthcare 15 points"* |
+| §5–§13 | Pipeline rules — adjust by describing the change you want |
 
 ---
 
@@ -319,26 +314,9 @@ Add `title_classifier` to your config (the setup wizard Step 2 does this automat
 
 `classify_title.py` reads this at startup and builds the regex patterns dynamically. No Python editing required.
 
-**Manual override** (advanced — only if you need fine-grained control):
+**Fine-grained control** (if you need to tune beyond the config):
 
-Edit patterns directly in `scripts/classify_title.py`. Note that `candidate_profile.json` takes precedence when populated.
-
-```python
-# Software Engineering example:
-_HAS_ANALYTICS = re.compile(r'\b(engineer|developer|programmer|architect|devops|platform)\b')
-_HAS_LEAD_MGR  = re.compile(r'\b(manager|lead|head|principal|staff|distinguished|fellow)\b')
-
-# Finance / FP&A example:
-_HAS_ANALYTICS = re.compile(r'\b(finance|financial|accounting|treasury|fp&a|risk|compliance)\b')
-_HAS_LEAD_MGR  = re.compile(r'\b(manager|controller|head|director|vp|partner)\b')
-
-# Product Management example:
-_HAS_ANALYTICS = re.compile(r'\b(product|growth|platform|strategy|portfolio)\b')
-_HAS_LEAD_MGR  = re.compile(r'\b(director|head|senior|principal|group|general)\b')
-```
-
-Also update `_TIER2` and `_TIER4` lists to match your profession's title ladder.
-Run `python3 scripts/classify_title.py` (no args) to run the built-in verification suite after changes.
+Say in Claude Code: *"update my title classifier — my profession is software engineering, Tier 1 titles are 'Engineering Manager' and 'Staff Engineer', Tier 2 is 'Senior Engineer'"*. Claude updates the patterns and runs the built-in verification suite automatically.
 
 ---
 
@@ -375,23 +353,9 @@ You do not need to manually create column headers — the script handles all she
 
 ## 10. Salary Thresholds
 
-Set in `data/content/candidate_profile.json → salary_thresholds`. The setup wizard Step 4 prompts for these interactively. No Python editing required.
+Set by the setup wizard (Step 4) interactively. To update after setup, say in Claude Code: *"update my UK salary threshold to £85,000"* or *"set the Netherlands threshold to €95,000"*.
 
-```json
-{
-  "salary_thresholds": {
-    "uk": 80000,
-    "nl": 90000,
-    "de": 90000,
-    "dk": 700000,
-    "ie": 90000,
-    "se": 800000,
-    "ae": 360000
-  }
-}
-```
-
-`common.py` reads from this file at startup. If the file is missing or the key is absent, built-in defaults are used (same values as above).
+`common.py` reads from `candidate_profile.json → salary_thresholds` at startup. If the key is absent, built-in defaults are used.
 
 Remote/contract roles are automatically screened at 80% of the market threshold (`SALARY_THRESHOLDS_REMOTE`).
 
@@ -408,11 +372,6 @@ The factor 220 is `DAY_RATE_ANNUAL_FACTOR` in `scripts/common.py`.
 | 60–74 | Flag for human review (Review Needed) |
 | < 60 OR visa rejected | Auto-reject |
 
-Thresholds are set in `score_jobs.py`:
-```python
-SHORTLIST_THRESHOLD = 75
-REVIEW_THRESHOLD    = 60
-```
+To adjust thresholds, say in Claude Code: *"raise the shortlist threshold to 80"* or *"lower the review threshold to 55"*.
 
-Adjust these if you want a broader or narrower review funnel.
-Point allocations per dimension are in `docs/fit-scoring-rubric.md`.
+Point allocations per dimension are in `docs/fit-scoring-rubric.md` — adjustable by saying *"update my scoring rubric"* in Claude Code.

@@ -16,21 +16,27 @@
 # ============================================================
 
 # ── INPUT FORMAT ─────────────────────────────────────────────
-# Edit data/manual_jobs_input.json. Two supported formats:
+# User provides job details conversationally — no file editing required:
 #
-# MINIMAL (description auto-fetched):
-#   { "job_url": "https://www.linkedin.com/jobs/view/4429589502/" }
-#   { "job_url": "https://www.linkedin.com/jobs/view/4434567890/", "market": "de" }
+# MINIMAL (description auto-fetched via browser):
+#   "inject this job: https://www.linkedin.com/jobs/view/4429589502/"
+#   "inject this job: https://... — market: de"
 #
-# FULL (all fields explicit — no browser fetch needed):
-#   { "job_title": "...", "company_name": "...", "location": "...",
-#     "job_url": "...", "description": "...", "posted_date": "YYYY-MM-DD" }
+# FULL (no browser fetch needed):
+#   "inject this job: Head of Analytics at Spotify, Stockholm, permanent — [paste JD text]"
 #
-# Optional override fields (any format):
-#   market, posted_date, is_contract, is_remote_only, role_type, eor_viability
+# Optional overrides the user can mention:
+#   market, posted_date, is_contract, is_remote_only
 #
-# Full-form entries (with description populated) skip Step 2 entirely.
+# Step 0 reads whatever the user provided, builds the entry, and writes it to
+# data/manual_jobs_input.json internally — the user never sees the JSON format.
 # ============================================================
+
+# ── STEP 0 — Build entry from user input ─────────────────────
+# Parse what the user provided (URL and/or job details).
+# Build a JSON entry in the appropriate format (minimal or full).
+# Write to data/manual_jobs_input.json (read first, append, write back).
+# Log: "[inject] Entry added: [Company] [Title] — proceeding to fetch/score"
 
 # ── STEP 1 — Read and parse input file ───────────────────────
 # Read data/manual_jobs_input.json.
