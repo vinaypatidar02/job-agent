@@ -344,8 +344,27 @@ def step_experience(profile: dict) -> dict:
                     f.write(header)
                     f.write(parsed)
                 print_ok(f"Created: {EXPERIENCE_PATH.relative_to(ROOT)}")
-                print(f"\n  {YELLOW}Review experience_bank.md — verify metrics, add tags, remove any errors.{RESET}")
-                print(f"  Format: • [tag] Action verb + context + metric")
+                print(f"""
+  {YELLOW}Next: open experience_bank.md and enrich it beyond your CV.{RESET}
+
+  Your CV is a curated snapshot — it leaves out a lot. The pipeline selects
+  bullets per job description, so the richer the bank, the better the tailoring.
+
+  Add anything that didn't make it onto your CV:
+    • Achievements that were cut for space (e.g. supporting metrics, side wins)
+    • Technical depth from each role (tools, methods, scale of data/systems)
+    • Leadership moments: hiring, mentoring, cross-team influence, process changes
+    • Domain-specific work that's only relevant for certain JD types
+      (e.g. a pricing project relevant for commercial roles but not product roles)
+    • Quantified outcomes you can defend in an interview, even if not on the CV
+
+  Tag each bullet so the pipeline knows when to use it:
+    • [tag] Action verb + context + specific, verifiable metric
+  Example: • [pricing] Rebuilt dynamic pricing model for 2,000+ SKUs, improving
+              gross margin by 12% within one quarter.
+
+  Format reference is at the top of experience_bank.md.
+""")
                 return profile
             else:
                 print_warn("AI parsing unavailable — falling back to manual template.")
