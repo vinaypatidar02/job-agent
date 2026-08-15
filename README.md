@@ -31,18 +31,19 @@ any profession.
 ```mermaid
 flowchart TD
     A["🔍 LinkedIn Search URLs\n(configure in run_scout.py)"] --> B
+    E["auto_rejected.json"]
 
     subgraph SCOUT ["Job Discovery"]
         B["Apify Scraper\n[DET] $0.001/job"] --> C
         C["Pass 1 Gates\n[DET] Free\nAge · Title · Language · Blocklist · Dedup"] --> D
         D{Passed?}
-        D -- Rejected --> E["auto_rejected.json"]
+        D -- "Rejected\n(Pass 1)" --> E
         D -- Passed --> F["Enrichment\n[DET] Free\nSalary · Work mode · ATS URL"]
         F --> G["Pass 2 Scoring\n[LLM — Haiku Batch]\n~$0.002–0.005/job\nFit 0–100 · Visa · Pros/cons"]
     end
 
     G --> H{Score?}
-    H -- "< 60 or visa denied" --> E
+    H -- "Rejected\n(< 60 or visa denied)" --> E
     H -- "60–74" --> I["Review Needed\njob_tracker.json"]
     H -- "≥ 75" --> J["Shortlisted\njob_tracker.json"]
 

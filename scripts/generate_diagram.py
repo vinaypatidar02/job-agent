@@ -99,7 +99,7 @@ def _group(ax, y_bot, height, title, fill, border):
         (GX + GW/2 - tb_w/2, y_bot + height - tb_h/2),
         tb_w, tb_h,
         boxstyle="round,pad=0,rounding_size=0.12",
-        linewidth=0, facecolor=BG,
+        linewidth=1.8, edgecolor=border, facecolor=BG,
         zorder=4, clip_on=False,
     ))
     ax.text(GX + GW/2, y_bot + height, title,
@@ -144,7 +144,7 @@ def draw() -> Path:
 
     # ─────────────────── SCOUT GROUP ──────────────────────────────────────────
     # Gap between the top border (title pill) and the first node inside the group
-    SCOUT_TITLE_GAP = 1.10
+    SCOUT_TITLE_GAP = 0.70
     y = y_input - STEP - SCOUT_TITLE_GAP
 
     _arrow_down(ax, CX, y_input - HH, y + HH)
@@ -196,8 +196,15 @@ def draw() -> Path:
     y_score = y
     SCORE_HH = SCORE_H / 2
 
+    # Pass 2 side arrow → auto_rejected (score < 60 or visa denied)
+    _arrow_right(ax, side_x_start, side_x_end - 0.95, y_score,
+                 label="< 60 or visa")
+    _node(ax, side_x_end, y_score, 1.90, BH,
+          "auto_rejected", ".json", STORE,
+          tc=TEXT_LIGHT, lfs=8.5, sfs=8.0)
+
     # Draw scout group behind all its nodes
-    scout_top    = y_input - HH - 0.32
+    scout_top    = y_input - HH - 0.50
     scout_bottom = y_score - SCORE_HH - 0.50   # padding below last scout node
     _group(ax, scout_bottom, scout_top - scout_bottom,
            "Job Discovery — daily or on demand", GROUP_SCOUT, DET)
@@ -248,7 +255,7 @@ def draw() -> Path:
     PREP_TITLE_GAP = 0.70
     # Pre-calculate y_pdf so prep_bottom is explicit (avoids straddle on boundary)
     y_pdf_calc  = y_pull - PREP_TITLE_GAP - len(prep_nodes) * STEP
-    prep_top    = y_pull - HH - 0.32
+    prep_top    = y_pull - HH - 0.50
     prep_bottom = y_pdf_calc - HH - 0.65   # padding below last prep node
     _group(ax, prep_bottom, prep_top - prep_bottom,
            "Application Prep — per approved job", GROUP_PREP, "#C47A1A")

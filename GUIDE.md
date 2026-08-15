@@ -42,18 +42,19 @@ This is an end-to-end job-search automation system. It discovers jobs on LinkedI
 ```mermaid
 flowchart TD
     A["🔍 Configure LinkedIn\nSearch URLs\n(run_scout.py)"] --> B
+    E["auto_rejected.json\n(not tracked)"]
 
     subgraph SCOUT ["Job Discovery — run once daily or on demand"]
         B["Apify Scraper\n[DET] $0.001/job\n(curious_coder/linkedin-jobs-scraper)"] --> C
         C["Pass 1 Gates\n[DET] Free\nAge · Title · Language · Blocklist · Dedup"] --> D
         D{Passed?}
-        D -- Rejected --> E["auto_rejected.json\n(not tracked)"]
+        D -- "Rejected\n(Pass 1)" --> E
         D -- Passed --> F["Enrichment\n[DET] Free\nSalary · Work mode · ATS URL"]
         F --> G["Pass 2 Scoring\n[LLM — Haiku Batch]\n~$0.002–0.005/job\nFit 0–100 · Visa · Role type\nPros/cons · EOR viability"]
     end
 
     G --> H{Score?}
-    H -- "< 60 or visa denied" --> E
+    H -- "Rejected\n(< 60 or visa denied)" --> E
     H -- "60–74" --> I["Review Needed\njob_tracker.json"]
     H -- "≥ 75" --> J["Shortlisted\njob_tracker.json"]
 
