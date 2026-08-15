@@ -22,8 +22,10 @@ Create `.env` from `.env.example`: `cp .env.example .env`
 
 ### IMAP provider configuration (gmail_backfill.py)
 
+The setup wizard Step 1 asks for your email provider and updates `gmail_backfill.py` automatically. To change provider after setup, re-run the wizard or edit the file directly:
+
 ```python
-# Edit in scripts/gmail_backfill.py USER CONFIG section:
+# Edit in scripts/gmail_backfill.py:
 # Yahoo (default):  IMAP_HOST = "imap.mail.yahoo.com"     IMAP_PORT = 993
 # Gmail:            IMAP_HOST = "imap.gmail.com"           IMAP_PORT = 993
 # Outlook:          IMAP_HOST = "outlook.office365.com"    IMAP_PORT = 993
@@ -220,25 +222,50 @@ Rules:
 
 ---
 
-## 5. LinkedIn URL Builder
+## 5. LinkedIn Search Configuration
 
-Build search URLs at linkedin.com/jobs, then copy the full URL to `SEARCHES_APIFY` in `scripts/run_scout.py`.
+Search configuration is stored in `data/content/search_config.json` and loaded automatically by `run_scout.py`. The setup wizard Step 5 builds entries interactively — no URL editing required.
 
-Key URL parameters:
+**search_config.json format:**
 
-| Parameter | Value | Meaning |
-|-----------|-------|---------|
-| `f_TPR` | `r86400` | Past 24 hours (86400 seconds) |
-| `f_TPR` | `r604800` | Past 7 days |
-| `f_E` | `4` | Mid-Senior level |
-| `f_E` | `5` | Director level |
-| `f_E` | `4%2C5` | Mid-Senior AND Director (URL-encoded comma) |
-| `f_JT` | `F` | Full-time |
-| `f_JT` | `C` | Contract |
-| `f_JT` | `F%2CC` | Full-time AND Contract |
-| `geoId` | see table | Geographic region |
+```json
+{
+  "searches": [
+    {
+      "label": "Head of Analytics — UK",
+      "market": "uk",
+      "keywords": "Head of Analytics",
+      "time_window": "r86400",
+      "include_contract": false,
+      "max_jobs": 100
+    }
+  ]
+}
+```
 
-geoId values by market:
+**Field reference:**
+
+| Field | Values | Description |
+|-------|--------|-------------|
+| `label` | string | Display name (shown in logs and dry-run output) |
+| `market` | uk, nl, de, se, dk, ie, ae | Target market — determines geoId automatically |
+| `keywords` | string | Job title or keyword phrase |
+| `time_window` | `r86400` / `r604800` / `r2592000` | Past 24 hours / Past week / Past month |
+| `include_contract` | true / false | Include contract roles in results |
+| `max_jobs` | integer | Cap per URL — cost is $0.001/job |
+
+**LinkedIn filter reliability:**
+
+| Filter | Reliability | Notes |
+|--------|------------|-------|
+| Keywords | ✅ Always works | Core search parameter |
+| Location / Market | ✅ Always works | Driven by geoId |
+| Experience level | ✅ Reliable | Wizard always selects Mid-Senior + Director |
+| Date posted | ✅ Reliable | Only 3 options: Past 24h / Past week / Past month — custom ranges not supported |
+| Job type (Full-time / Contract) | ⚠️ Partially reliable | Employers sometimes miscategorise; pipeline re-detects from JD text |
+| Work arrangement (Remote / Hybrid) | ⚠️ Unreliable | Labels inconsistent; pipeline re-detects from JD text instead |
+
+**geoId values (reference — filled automatically by wizard):**
 
 | Market | geoId |
 |--------|-------|
@@ -249,15 +276,6 @@ geoId values by market:
 | Denmark | 104514075 |
 | Ireland | 104738515 |
 | UAE | 104305776 |
-
-Example search entry in run_scout.py:
-```python
-SEARCHES_APIFY = [
-    ("Head of Analytics",
-     "https://www.linkedin.com/jobs/search?keywords=Head+of+Analytics&geoId=101165590&f_TPR=r86400&f_E=4%2C5&f_JT=F",
-     100),  # max 100 jobs — costs max $0.10
-]
-```
 
 ---
 
@@ -286,29 +304,38 @@ All configurable blocks are in the `USER CONFIGURATION` section at the top of `s
 ## 7. classify_title.py — Profession Configuration
 
 The title tier classifier uses regex patterns to score job titles into Tiers 1–5.
-Default patterns are tuned for analytics/data roles.
 
-To configure for a different profession, edit the patterns in `scripts/classify_title.py`:
+**Recommended approach — via candidate_profile.json:**
+
+Add `title_classifier` to your config (the setup wizard Step 2 does this automatically):
+
+```json
+{
+  "title_classifier": {
+    "domain_keywords": ["engineer", "developer", "architect", "platform"],
+    "seniority_keywords": ["manager", "lead", "head", "principal", "staff"]
+  }
+}
+```
+
+`classify_title.py` reads this at startup and builds the regex patterns dynamically. No Python editing required.
+
+**Manual override** (advanced — only if you need fine-grained control):
+
+Edit patterns directly in `scripts/classify_title.py`. Note that `candidate_profile.json` takes precedence when populated.
 
 ```python
-# Current default (analytics/data):
-_HAS_ANALYTICS = re.compile(
-    r'\b(analytics|analyst|insights?|intelligence|growth|commercial|'
-    r'performance|behavioural?|behavioral|reporting|crm)\b'
-)
-_HAS_LEAD_MGR = re.compile(r'\b(manager|lead|head|principal)\b')
-
 # Software Engineering example:
 _HAS_ANALYTICS = re.compile(r'\b(engineer|developer|programmer|architect|devops|platform)\b')
-_HAS_LEAD_MGR = re.compile(r'\b(manager|lead|head|principal|staff|distinguished|fellow)\b')
+_HAS_LEAD_MGR  = re.compile(r'\b(manager|lead|head|principal|staff|distinguished|fellow)\b')
 
 # Finance / FP&A example:
 _HAS_ANALYTICS = re.compile(r'\b(finance|financial|accounting|treasury|fp&a|risk|compliance)\b')
-_HAS_LEAD_MGR = re.compile(r'\b(manager|controller|head|director|vp|partner)\b')
+_HAS_LEAD_MGR  = re.compile(r'\b(manager|controller|head|director|vp|partner)\b')
 
 # Product Management example:
 _HAS_ANALYTICS = re.compile(r'\b(product|growth|platform|strategy|portfolio)\b')
-_HAS_LEAD_MGR = re.compile(r'\b(director|head|senior|principal|group|general)\b')
+_HAS_LEAD_MGR  = re.compile(r'\b(director|head|senior|principal|group|general)\b')
 ```
 
 Also update `_TIER2` and `_TIER4` lists to match your profession's title ladder.
@@ -320,13 +347,13 @@ Run `python3 scripts/classify_title.py` (no args) to run the built-in verificati
 
 | Market | Code | Visa Type | Salary Gate | Key Cities | geoId | Adzuna |
 |--------|------|-----------|-------------|-----------|-------|--------|
-| UK | uk | Skilled Worker Visa | Configure in common.py | London, Manchester, Birmingham | 101165590 | Supported |
-| Netherlands | nl | Kennismigrant | Configure in common.py | Amsterdam, Rotterdam, Utrecht | 102890719 | Supported |
-| Germany | de | EU Blue Card | Configure in common.py | Berlin, Munich, Frankfurt, Hamburg | 101282230 | Supported |
-| Denmark | dk | Pay Limit Scheme | Configure in common.py | Copenhagen, Aarhus | 104514075 | Not supported (Apify only) |
-| Ireland | ie | Critical Skills Employment Permit | Configure in common.py | Dublin, Cork, Galway | 104738515 | Not supported (Apify only) |
-| Sweden | se | Arbetstillstånd | Configure in common.py | Stockholm, Gothenburg, Malmö | 105117694 | Not supported |
-| UAE | ae | UAE Employment Visa | Configure in common.py | Dubai, Abu Dhabi, Sharjah | 104305776 | Not supported (Apify only) |
+| UK | uk | Skilled Worker Visa | Set in candidate_profile.json | London, Manchester, Birmingham | 101165590 | Supported |
+| Netherlands | nl | Kennismigrant | Set in candidate_profile.json | Amsterdam, Rotterdam, Utrecht | 102890719 | Supported |
+| Germany | de | EU Blue Card | Set in candidate_profile.json | Berlin, Munich, Frankfurt, Hamburg | 101282230 | Supported |
+| Denmark | dk | Pay Limit Scheme | Set in candidate_profile.json | Copenhagen, Aarhus | 104514075 | Not supported (Apify only) |
+| Ireland | ie | Critical Skills Employment Permit | Set in candidate_profile.json | Dublin, Cork, Galway | 104738515 | Not supported (Apify only) |
+| Sweden | se | Arbetstillstånd | Set in candidate_profile.json | Stockholm, Gothenburg, Malmö | 105117694 | Not supported |
+| UAE | ae | UAE Employment Visa | Set in candidate_profile.json | Dubai, Abu Dhabi, Sharjah | 104305776 | Not supported (Apify only) |
 
 Note: This public version uses Apify only — Adzuna is excluded. The `--source adzuna` flag is not available.
 
@@ -349,26 +376,28 @@ You do not need to manually create column headers — the script handles all she
 
 ## 10. Salary Thresholds
 
-Set in `scripts/common.py`:
+Set in `data/content/candidate_profile.json → salary_thresholds`. The setup wizard Step 4 prompts for these interactively. No Python editing required.
 
-```python
-SALARY_THRESHOLDS = {
-    "uk": 80000,    # GBP
-    "nl": 90000,    # EUR
-    "de": 90000,    # EUR
-    "dk": 700000,   # DKK
-    "ie": 90000,    # EUR
-    "se": 800000,   # SEK
-    "ae": 360000,   # AED
+```json
+{
+  "salary_thresholds": {
+    "uk": 80000,
+    "nl": 90000,
+    "de": 90000,
+    "dk": 700000,
+    "ie": 90000,
+    "se": 800000,
+    "ae": 360000
+  }
 }
-
-SALARY_THRESHOLDS_REMOTE = {k: int(v * 0.8) for k, v in SALARY_THRESHOLDS.items()}
 ```
 
-`SALARY_THRESHOLDS_REMOTE` (80% of market threshold) applies to remote-only and contract roles.
+`common.py` reads from this file at startup. If the file is missing or the key is absent, built-in defaults are used (same values as above).
+
+Remote/contract roles are automatically screened at 80% of the market threshold (`SALARY_THRESHOLDS_REMOTE`).
 
 Day-rate annualisation: `day_rate × 220 = annual_equivalent`
-The factor 220 is `DAY_RATE_ANNUAL_FACTOR` in common.py.
+The factor 220 is `DAY_RATE_ANNUAL_FACTOR` in `scripts/common.py`.
 
 ---
 

@@ -125,6 +125,23 @@
     "tags": ["your_tag_1", "your_tag_2", "your_tag_3", "leadership", "ai"]
   },
 
+  "salary_thresholds": {
+    "_doc": "Annual salary gate per market in local currency. Pipeline auto-applies 80% for remote/contract roles. Set via setup_wizard.py Step 4 or edit directly. Remove markets you are not targeting.",
+    "uk": 80000,
+    "nl": 90000,
+    "de": 90000,
+    "dk": 700000,
+    "ie": 90000,
+    "se": 800000,
+    "ae": 360000
+  },
+
+  "title_classifier": {
+    "_doc": "Keywords for the title tier classifier (classify_title.py). domain_keywords: words in your target job titles. seniority_keywords: seniority indicators. Both are used to build regex patterns — no regex syntax needed, just plain words. Set by setup_wizard.py Step 2 from your domain keywords.",
+    "domain_keywords": ["your_domain_keyword_1", "your_domain_keyword_2"],
+    "seniority_keywords": ["manager", "lead", "head", "principal", "director"]
+  },
+
   "profile": {
     "_doc": "Used in Pass 2 scoring prompt, validation checks, and profile summary generation.",
     "years_of_experience": 5,

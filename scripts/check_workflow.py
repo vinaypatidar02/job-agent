@@ -84,8 +84,8 @@ def check_c1_files():
         "mcp.json",
         ".claude/settings.json",
     ]
-    # .env is gitignored — users create it from .env.example. Warn only.
-    setup_files = [".env"]
+    # .env and search_config.json are user-created — warn only, not hard fail.
+    setup_files = [".env", "data/content/search_config.json"]
     missing = [p for p in required if not (ROOT / p).exists()]
     missing_setup = [p for p in setup_files if not (ROOT / p).exists()]
     if missing:
@@ -93,7 +93,7 @@ def check_c1_files():
               "Ensure all pipeline files are present before running")
     elif missing_setup:
         _fail("C1 Required files", f"{len(missing_setup)} setup file(s) not found: {', '.join(missing_setup)}",
-              "Copy .env.example → .env and fill in your API keys (see GUIDE.md §4 Step 2)")
+              "Run python3 scripts/setup_wizard.py to create these (GUIDE.md §4)")
     else:
         _pass("C1 Required files", f"{len(required) + len(setup_files)}/{len(required) + len(setup_files)}")
 

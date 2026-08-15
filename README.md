@@ -23,6 +23,11 @@ any profession.
 
 **[DET]** = Deterministic Python — free, reproducible. **[LLM]** = Claude API — inference cost noted.
 
+![Pipeline Architecture](docs/images/pipeline.png)
+
+<details>
+<summary>Text diagram (Mermaid)</summary>
+
 ```mermaid
 flowchart TD
     A["🔍 LinkedIn Search URLs\n(configure in run_scout.py)"] --> B
@@ -61,6 +66,8 @@ flowchart TD
     V --> W["Status Update\n[DET] job_tracker.json → Sheet"]
 ```
 
+</details>
+
 ## Quick Start
 
 ```bash
@@ -70,9 +77,9 @@ cd job-agent
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-# 2. Run setup wizard (handles Steps 1–4 interactively)
+# 2. Run setup wizard (handles Steps 1–6 interactively)
 python3 scripts/setup_wizard.py
-# Then complete Steps 5–13 in GUIDE.md §4
+# Then complete Steps 7–11 in GUIDE.md §4
 
 # 3. Integrity check (all checks must pass before first run)
 python3 scripts/check_workflow.py
@@ -163,11 +170,11 @@ rubric, market config, and candidate profile — so every interaction is aware o
 ## What you need to configure
 
 1. Fill `.env` with your API keys (see `.env.example`)
-2. Fill `data/content/candidate_profile.json` with your personal and professional details
+2. Fill `data/content/candidate_profile.json` with your personal and professional details (wizard handles steps 1–5)
 3. Write `data/content/experience_bank.md` with your work history and bullet points
-4. Add your LinkedIn search URLs to `scripts/run_scout.py` (`SEARCHES_APIFY` block)
-5. Set your salary thresholds in `scripts/common.py` (`SALARY_THRESHOLDS`)
-6. Set your scoring rubric in `docs/fit-scoring-rubric.md`
+4. Set your salary thresholds in `candidate_profile.json → salary_thresholds` (wizard Step 4 — no code editing)
+5. Configure your LinkedIn searches in `data/content/search_config.json` (wizard Step 5 — builds URLs interactively)
+6. Set your scoring rubric in `docs/fit-scoring-rubric.md` (wizard Step 6 — guided builder)
 
 Full step-by-step instructions: **GUIDE.md §4** · Customisation options: **GUIDE.md §6**
 
@@ -182,4 +189,4 @@ Full step-by-step instructions: **GUIDE.md §4** · Customisation options: **GUI
 
 ## License
 
-MIT License. See LICENSE file.
+Personal use only. See LICENSE file — commercial use, SaaS deployment, and sublicensing are prohibited.

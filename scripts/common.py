@@ -28,18 +28,30 @@ ENV_FILE = ROOT / ".env"
 # CONFIG — single-sourced pipeline thresholds
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Minimum acceptable salary per market (annual, local currency).
-# UK £80k / NL €90k / SE SEK 800k / DE €90k / DK DKK 700k / IE €90k / AE AED 360k —
-# CLAUDE.md §3 is the policy source; this constant is the single enforcement point for code.
-# DK/IE added 2026-07-24: DKK 700k ≈ €94k (aligns with NL/DE €90k, clears Pay Limit
-# Scheme visa threshold ~DKK 514k); IE €90k matches NL/DE.
-# AE added 2026-08-01: AED 360k ≈ £77k/€90k equivalent; tax-free so effective net
-# purchasing power exceeds UK/EU thresholds at this level.
-SALARY_THRESHOLDS = {"uk": 80_000, "nl": 90_000, "se": 800_000, "de": 90_000,
-                     "dk": 700_000, "ie": 90_000, "ae": 360_000}
+def _load_salary_thresholds() -> dict:
+    """Load salary thresholds from candidate_profile.json; fall back to built-in defaults.
+    Allows users to set thresholds in config without editing Python.
+    """
+    _defaults = {"uk": 80_000, "nl": 90_000, "se": 800_000, "de": 90_000,
+                 "dk": 700_000, "ie": 90_000, "ae": 360_000}
+    try:
+        import json as _json
+        _p = ROOT / "data" / "content" / "candidate_profile.json"
+        _raw = _json.loads(_p.read_text()).get("salary_thresholds", {})
+        _loaded = {k: v for k, v in _raw.items()
+                   if not k.startswith("_") and isinstance(v, (int, float))}
+        if _loaded:
+            return _loaded
+    except Exception:
+        pass
+    return _defaults
+
+
+# Salary gates: loaded from candidate_profile.json → salary_thresholds first,
+# falls back to built-in defaults. Edit in candidate_profile.json (not here).
+SALARY_THRESHOLDS = _load_salary_thresholds()
 
 # 80% of each market threshold — applied when is_remote_only or is_contract is true.
-# Remote/contract roles are geographically flexible and worth scoring at a reduced gate.
 SALARY_THRESHOLDS_REMOTE = {k: int(v * 0.8) for k, v in SALARY_THRESHOLDS.items()}
 
 DAY_RATE_ANNUAL_FACTOR = 220   # working days/year (used to annualise day-rate contracts)

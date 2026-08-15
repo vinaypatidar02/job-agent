@@ -236,6 +236,57 @@ SEARCHES_APIFY_DK = _open_job_type_filters(SEARCHES_APIFY_DK)
 SEARCHES_APIFY_IE = _open_job_type_filters(SEARCHES_APIFY_IE)
 SEARCHES_APIFY_AE = _open_job_type_filters(SEARCHES_APIFY_AE)
 
+# ── Load searches from config file (overrides hardcoded lists above) ──────────
+def _load_searches_from_config() -> dict[str, list]:
+    """Load search entries from data/content/search_config.json.
+    Returns dict mapping market_code → list of (label, url, max_jobs) tuples.
+    When non-empty, overrides the hardcoded SEARCHES_APIFY* lists above.
+    """
+    _GEO_IDS = {
+        "uk": "101165590", "nl": "102890719", "de": "101282230",
+        "se": "105117694", "dk": "104514075", "ie": "104738515", "ae": "104305776",
+    }
+    _TIME_WINDOW_MAP = {"r86400": "r86400", "r604800": "r604800", "r2592000": "r2592000"}
+    path = ROOT / "data" / "content" / "search_config.json"
+    if not path.exists():
+        return {}
+    try:
+        config = json.loads(path.read_text())
+        result: dict[str, list] = {}
+        for entry in config.get("searches", []):
+            if entry.get("_comment"):
+                continue  # skip template placeholder entries
+            market = entry.get("market", "uk")
+            keywords = entry.get("keywords", "").replace(" ", "+")
+            if not keywords or keywords == "Your+Role+Title":
+                continue  # skip unfilled placeholder entries
+            geo = _GEO_IDS.get(market, "101165590")
+            jt = "F%2CC" if entry.get("include_contract") else "F"
+            tw = _TIME_WINDOW_MAP.get(entry.get("time_window", "r86400"), "r86400")
+            url = (f"https://www.linkedin.com/jobs/search"
+                   f"?keywords={keywords}&geoId={geo}"
+                   f"&f_TPR={tw}&f_JT={jt}&f_E=4%2C5")
+            result.setdefault(market, []).append(
+                (entry.get("label", keywords), url, int(entry.get("max_jobs", 100)))
+            )
+        return result
+    except Exception as e:
+        print(f"[run_scout] Warning: could not load search_config.json: {e}")
+        return {}
+
+
+_config_searches = _load_searches_from_config()
+if _config_searches:
+    # Override hardcoded SEARCHES_APIFY* lists with config file entries
+    SEARCHES_APIFY    = _config_searches.get("uk", SEARCHES_APIFY)
+    SEARCHES_APIFY_NL = _config_searches.get("nl", SEARCHES_APIFY_NL)
+    SEARCHES_APIFY_SE = _config_searches.get("se", SEARCHES_APIFY_SE)
+    SEARCHES_APIFY_DE = _config_searches.get("de", SEARCHES_APIFY_DE)
+    SEARCHES_APIFY_DK = _config_searches.get("dk", SEARCHES_APIFY_DK)
+    SEARCHES_APIFY_IE = _config_searches.get("ie", SEARCHES_APIFY_IE)
+    SEARCHES_APIFY_AE = _config_searches.get("ae", SEARCHES_APIFY_AE)
+    print(f"[run_scout] Loaded {sum(len(v) for v in _config_searches.values())} searches from search_config.json")
+
 # UK subset for intl runs (first 2 entries of SEARCHES_APIFY).
 # Adjust the slice if your SEARCHES_APIFY includes more/fewer UK keywords.
 SEARCHES_APIFY_UK_INTL = SEARCHES_APIFY[:2]

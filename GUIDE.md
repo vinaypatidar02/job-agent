@@ -220,11 +220,12 @@ ALL_CHECKS = [...existing_checks..., _check_v24]
 
 Minimum time: **~30 minutes** for a basic working configuration.
 
-**Quickest path:** run the interactive setup wizard, which handles Steps 1–4:
+**Quickest path:** run the interactive setup wizard, which handles Steps 1–6:
 ```bash
 python3 scripts/setup_wizard.py
 ```
-Then complete Steps 5–13 manually.
+The wizard covers: `.env` setup, candidate profile, experience structure, market/salary selection,
+LinkedIn search URL builder, and scoring rubric generation. Complete Steps 7–11 manually afterwards.
 
 ---
 
@@ -351,24 +352,30 @@ Your Job Title | 2022-06–present
 
 ### Step 5: Configure LinkedIn Search URLs
 
-Open `scripts/run_scout.py`. Find `SEARCHES_APIFY` and replace the placeholder entries with your target roles and markets:
+**Handled by setup_wizard.py Step 5 (recommended)**
 
-```python
-SEARCHES_APIFY = [
-    (
-        "Your Role Title",
-        "https://www.linkedin.com/jobs/search?keywords=YOUR+ROLE&geoId=YOUR_GEO_ID&f_TPR=r86400&f_E=4%2C5",
-        100,   # max jobs per run
-    ),
-]
+The wizard builds search URLs interactively — you choose keywords, market, date window (Past 24 hours / Past week / Past month), and contract inclusion. It saves entries to `data/content/search_config.json`, which `run_scout.py` reads automatically.
+
+**LinkedIn date filter note:** LinkedIn only supports three date windows — Past 24 hours, Past week, and Past month. Custom date ranges are not available via the API.
+
+**To add searches after setup:** edit `data/content/search_config.json` directly:
+
+```json
+{
+  "searches": [
+    {
+      "label": "Head of Analytics — UK",
+      "market": "uk",
+      "keywords": "Head of Analytics",
+      "time_window": "r86400",
+      "include_contract": false,
+      "max_jobs": 100
+    }
+  ]
+}
 ```
 
-**Building your URL:**
-1. Go to `linkedin.com/jobs` and search your target role + location
-2. Apply filters: Date Posted = Past 24 hours, Experience Level = Mid-Senior + Director
-3. Copy the full URL from your browser address bar
-
-**Market geoIds:**
+**Market geoIds (for reference — wizard fills these automatically):**
 
 | Market | geoId |
 |--------|-------|
@@ -380,27 +387,32 @@ SEARCHES_APIFY = [
 | Sweden | `105117694` |
 | UAE | `104305776` |
 
-See `CONFIGURATION.md §5` for a full LinkedIn URL parameter guide.
+See `CONFIGURATION.md §5` for advanced URL parameters and filter reliability notes.
 
 ---
 
 ### Step 6: Set Salary Thresholds
 
-Open `scripts/common.py` and find `SALARY_THRESHOLDS`. Set your minimum acceptable annual salary per market and currency:
+**Handled by setup_wizard.py Step 4 (recommended)**
 
-```python
-SALARY_THRESHOLDS = {
-    "uk": 80000,    # GBP
-    "nl": 90000,    # EUR
-    "de": 90000,    # EUR
-    "dk": 700000,   # DKK
-    "ie": 90000,    # EUR
-    "se": 800000,   # SEK
-    "ae": 360000,   # AED
+The wizard prompts for a minimum annual salary per market and writes to `candidate_profile.json → salary_thresholds`. No Python editing required.
+
+**To edit directly** after setup:
+```json
+{
+  "salary_thresholds": {
+    "uk": 80000,
+    "nl": 90000,
+    "de": 90000,
+    "dk": 700000,
+    "ie": 90000,
+    "se": 800000,
+    "ae": 360000
+  }
 }
 ```
 
-Jobs with a stated salary below your threshold for the relevant market are auto-rejected by Pass 1. Jobs with no salary stated are flagged as `salary_gate = "tbc"` and passed through for human review.
+Jobs with a stated salary below your threshold are auto-rejected by Pass 1. Jobs with no stated salary are flagged as `salary_gate = "tbc"` and passed through for human review. Remote/contract roles are screened at 80% of the threshold automatically.
 
 ---
 
@@ -425,15 +437,17 @@ See `CONFIGURATION.md §6` for all USER CONFIG options and their interactions.
 
 ### Step 8: Configure docs/fit-scoring-rubric.md
 
-Open `docs/fit-scoring-rubric.md`. This file is injected into the Claude Pass 2 scoring prompt — it defines what a good job match looks like **for you**.
+**Handled by setup_wizard.py Step 6 (recommended)**
 
-Replace all `[YOUR_X]` placeholders with your actual targets:
-- Tier 1 titles (highest-seniority roles you're targeting)
-- Preferred domains (industries, company types)
+The wizard's scoring rubric builder asks structured questions and generates the file:
+- Tier 1–4 job title targets (highest-priority → borderline)
+- Preferred industries and company types
 - Core skills to match against
-- Target cities per market with location scores
+- Target UK cities with location scores (other markets are pre-configured)
 
-**This file directly controls which jobs get shortlisted vs. rejected.** An unedited rubric will produce poor scoring results.
+**To edit after wizard generation:** open `docs/fit-scoring-rubric.md` directly — it's a plain text file. Claude reads it at every session start via `CLAUDE.md @docs/fit-scoring-rubric.md`.
+
+**This file directly controls which jobs get shortlisted vs. rejected.** An unedited or misconfigured rubric produces poor scoring results — review it after the first scout run.
 
 ---
 

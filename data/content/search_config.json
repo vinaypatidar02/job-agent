@@ -1,0 +1,19 @@
+{
+  "_doc": "Job search configuration. Set by setup_wizard.py Step 5 or edit directly. run_scout.py reads from this file when present — overrides the hardcoded SEARCHES_APIFY lists.",
+  "_time_windows": {
+    "r86400": "Past 24 hours (recommended — catches fresh postings before they age)",
+    "r604800": "Past week (7 days — higher volume, more stale posts)",
+    "r2592000": "Past month (highest volume, most stale — use only for broad coverage)"
+  },
+  "searches": [
+    {
+      "_comment": "Replace this example entry with your own. One entry per role+market combination.",
+      "label": "YOUR ROLE TITLE — Market",
+      "market": "uk",
+      "keywords": "Your Role Title",
+      "time_window": "r86400",
+      "include_contract": false,
+      "max_jobs": 100
+    }
+  ]
+}

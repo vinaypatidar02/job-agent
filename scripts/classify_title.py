@@ -67,6 +67,31 @@ _HAS_ANALYTICS = re.compile(
 
 _HAS_LEAD_MGR = re.compile(r'\b(manager|lead|head|principal)\b')
 
+# ── Load profession-specific patterns from candidate_profile.json ─────────────
+def _load_profile_patterns() -> tuple:
+    """Override _HAS_ANALYTICS and _HAS_LEAD_MGR from candidate_profile.json.
+    Returns (domain_pattern, seniority_pattern) or (None, None) if not configured.
+    """
+    try:
+        import json as _json
+        from pathlib import Path as _Path
+        _p = _Path(__file__).parent.parent / "data" / "content" / "candidate_profile.json"
+        _tc = _json.loads(_p.read_text()).get("title_classifier", {})
+        _domain_kws = [k for k in _tc.get("domain_keywords", []) if not k.startswith("your_")]
+        _senior_kws = [k for k in _tc.get("seniority_keywords", []) if k]
+        _d_pat = re.compile(r'\b(' + '|'.join(re.escape(k) for k in _domain_kws) + r')\b', re.I) if _domain_kws else None
+        _s_pat = re.compile(r'\b(' + '|'.join(re.escape(k) for k in _senior_kws) + r')\b', re.I) if _senior_kws else None
+        return _d_pat, _s_pat
+    except Exception:
+        return None, None
+
+
+_profile_domain_pat, _profile_seniority_pat = _load_profile_patterns()
+if _profile_domain_pat is not None:
+    _HAS_ANALYTICS = _profile_domain_pat   # override with profession-specific pattern
+if _profile_seniority_pat is not None:
+    _HAS_LEAD_MGR = _profile_seniority_pat
+
 # ── Tier 1 explicit patterns (titles that don't hit general has_analytics) ────
 # "Head of Data" — "data" alone isn't in _HAS_ANALYTICS to avoid false positives
 # (e.g. "Database Manager" would fire). Explicit patterns handle these edge cases.

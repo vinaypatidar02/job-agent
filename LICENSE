@@ -1,0 +1,32 @@
+job-agent Personal Use License
+
+Copyright (c) 2026 job-agent contributors
+
+Permission is hereby granted, free of charge, to any individual person obtaining
+a copy of this software and associated documentation files (the "Software"), to
+use, copy, modify, and run the Software solely for personal, non-commercial
+purposes (including personal job searching), subject to the following conditions:
+
+1. ATTRIBUTION
+   This copyright notice and permission notice shall be included in all copies
+   or substantial portions of the Software.
+
+2. NON-COMMERCIAL RESTRICTION
+   The Software may NOT be used for commercial purposes. Commercial purposes
+   include, without limitation:
+     - Selling the Software or any derivative work
+     - Offering the Software or a derivative as a paid or free-to-use SaaS product
+     - Using the Software as part of a commercial product or service offering
+     - Sublicensing the Software for commercial gain
+
+3. DERIVATIVES
+   Modified versions must carry prominent notices of what was changed and must be
+   distributed under the same terms as this license.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
