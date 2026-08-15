@@ -91,9 +91,19 @@ def _group(ax, y_bot, height, title, fill, border):
         linewidth=1.8, edgecolor=border, facecolor=fill,
         zorder=1, alpha=0.50, clip_on=False,
     ))
-    # Title sits ABOVE the group box border so it never collides with interior nodes
-    ax.text(GX + GW/2, y_bot + height + 0.12, title,
-            ha="center", va="bottom", fontsize=9.5,
+    # Title is centred ON the top border line. A white pill behind it masks both
+    # the border stroke and any arrow that passes through this area, so the label
+    # is always readable regardless of what sits above or below.
+    tb_w, tb_h = 6.2, 0.38
+    ax.add_patch(FancyBboxPatch(
+        (GX + GW/2 - tb_w/2, y_bot + height - tb_h/2),
+        tb_w, tb_h,
+        boxstyle="round,pad=0,rounding_size=0.12",
+        linewidth=0, facecolor=BG,
+        zorder=4, clip_on=False,
+    ))
+    ax.text(GX + GW/2, y_bot + height, title,
+            ha="center", va="center", fontsize=9.5,
             color=border, fontweight="bold", zorder=5, clip_on=False)
 
 
@@ -187,7 +197,7 @@ def draw() -> Path:
     SCORE_HH = SCORE_H / 2
 
     # Draw scout group behind all its nodes
-    scout_top    = y_input - HH - 0.20   # just below input node bottom
+    scout_top    = y_input - HH - 0.32
     scout_bottom = y_score - SCORE_HH - 0.35
     _group(ax, scout_bottom, scout_top - scout_bottom,
            "Job Discovery — daily or on demand", GROUP_SCOUT, DET)
@@ -235,7 +245,7 @@ def draw() -> Path:
 
     # Pre-calculate y_pdf so prep_bottom is explicit (avoids straddle on boundary)
     y_pdf_calc  = y_pull - len(prep_nodes) * STEP
-    prep_top    = y_pull - HH - 0.20       # just below pull node bottom
+    prep_top    = y_pull - HH - 0.32
     prep_bottom = y_pdf_calc - HH - 0.50   # explicit 0.50 gap below last prep node
     _group(ax, prep_bottom, prep_top - prep_bottom,
            "Application Prep — per approved job", GROUP_PREP, "#C47A1A")
