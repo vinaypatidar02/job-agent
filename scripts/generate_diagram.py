@@ -198,12 +198,13 @@ def draw() -> Path:
 
     # Draw scout group behind all its nodes
     scout_top    = y_input - HH - 0.32
-    scout_bottom = y_score - SCORE_HH - 0.35
+    scout_bottom = y_score - SCORE_HH - 0.50   # padding below last scout node
     _group(ax, scout_bottom, scout_top - scout_bottom,
            "Job Discovery — daily or on demand", GROUP_SCOUT, DET)
 
     # ─────────────────── SHEET → HUMAN → PULL ─────────────────────────────────
-    y = y_score - SCORE_HH - GAP - HH
+    SCOUT_BOTTOM_GAP = 0.40   # visual breathing room below scout group border
+    y = y_score - SCORE_HH - GAP - HH - SCOUT_BOTTOM_GAP
     _arrow_down(ax, CX, y_score - SCORE_HH, y + HH)
     _node(ax, CX, y, BW, BH,
           "Google Sheets Dashboard",
@@ -246,7 +247,7 @@ def draw() -> Path:
     # Pre-calculate y_pdf so prep_bottom is explicit (avoids straddle on boundary)
     y_pdf_calc  = y_pull - len(prep_nodes) * STEP
     prep_top    = y_pull - HH - 0.32
-    prep_bottom = y_pdf_calc - HH - 0.50   # explicit 0.50 gap below last prep node
+    prep_bottom = y_pdf_calc - HH - 0.65   # padding below last prep node
     _group(ax, prep_bottom, prep_top - prep_bottom,
            "Application Prep — per approved job", GROUP_PREP, "#C47A1A")
 
@@ -261,7 +262,7 @@ def draw() -> Path:
 
     # ─────────────────── OUTPUTS → APPLY → EMAIL → STATUS ────────────────────
     # Extra gap so outputs/ready/ sits clearly below the Application Prep group
-    y = y_pdf - STEP - 0.45
+    y = y_pdf - STEP - 0.60
     _arrow_down(ax, CX, y_pdf - HH, y + HH)
     _node(ax, CX, y, BW, BH,
           "outputs/ready/  ·  CV.pdf + CoverLetter.pdf",
@@ -310,6 +311,8 @@ def draw() -> Path:
         _legend(ax, ix, iy, color, label)
 
     # ─────────────────── Save ─────────────────────────────────────────────────
+    # Clip bottom whitespace — keep a small margin below the legend
+    ax.set_ylim(ly - 0.90, Y_MAX)
     out = ROOT / "docs" / "images" / "pipeline.png"
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=150, bbox_inches="tight", facecolor=BG)
