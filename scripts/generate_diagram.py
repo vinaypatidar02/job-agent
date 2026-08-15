@@ -143,8 +143,8 @@ def draw() -> Path:
           INPUT)
 
     # ─────────────────── SCOUT GROUP ──────────────────────────────────────────
-    # Extra gap before first scout node creates room for the group title above the box
-    SCOUT_TITLE_GAP = 0.70
+    # Gap between the top border (title pill) and the first node inside the group
+    SCOUT_TITLE_GAP = 1.10
     y = y_input - STEP - SCOUT_TITLE_GAP
 
     _arrow_down(ax, CX, y_input - HH, y + HH)
@@ -244,14 +244,16 @@ def draw() -> Path:
          "[DET]  reportlab A4  ·  [YourName]_CV.pdf + CoverLetter.pdf  ·  Free", DET),
     ]
 
+    # Gap between the top border (title pill) and the first node inside the group
+    PREP_TITLE_GAP = 0.70
     # Pre-calculate y_pdf so prep_bottom is explicit (avoids straddle on boundary)
-    y_pdf_calc  = y_pull - len(prep_nodes) * STEP
+    y_pdf_calc  = y_pull - PREP_TITLE_GAP - len(prep_nodes) * STEP
     prep_top    = y_pull - HH - 0.32
     prep_bottom = y_pdf_calc - HH - 0.65   # padding below last prep node
     _group(ax, prep_bottom, prep_top - prep_bottom,
            "Application Prep — per approved job", GROUP_PREP, "#C47A1A")
 
-    y = y_pull - STEP
+    y = y_pull - STEP - PREP_TITLE_GAP
     y_prev = y_pull
     for label, sub, color in prep_nodes:
         _arrow_down(ax, CX, y_prev - HH, y + HH)
