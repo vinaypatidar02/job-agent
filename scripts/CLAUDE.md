@@ -148,7 +148,7 @@
 
 # 2. EMAIL TRACKING — Yahoo IMAP via scripts/gmail_backfill.py
 #    Transport: Yahoo IMAP (imap.mail.yahoo.com:993) — or any IMAP provider
-#    Config: YAHOO_EMAIL + YAHOO_APP_PASSWORD in .env (no OAuth needed)
+#    Config: IMAP_EMAIL + IMAP_APP_PASSWORD in .env (no OAuth needed)
 #    Other providers: Gmail → imap.gmail.com:993 (App Password required)
 #                     Outlook → outlook.office365.com:993
 #    What it does: searches inbox by subject keywords + ATS sender domains,

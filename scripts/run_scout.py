@@ -14,7 +14,7 @@ Usage:
   python3 scripts/run_scout.py --market all            # every configured market
   python3 scripts/run_scout.py --market all --intl-age 7  # one-time: cover 7 days instead of 24h
 
-Actor: bebity/linkedin-jobs-scraper ($0.001/job, see apify_cache.py for 24h cache)
+Actor: curious_coder/linkedin-jobs-scraper ($0.001/job, see apify_cache.py for 24h cache)
   Single-keyword URLs with filter params (f_E=4,5, f_TPR=r86400).
   f_WT and f_JT params are patched at runtime by _open_job_type_filters to include
   remote and contract roles alongside permanent (always-on behaviour).
@@ -322,7 +322,7 @@ markets_str = "NL + DE + DK + IE + AE (+ UK intl subset)" if market == "intl" el
     "UK + NL + SE + DE + DK + IE + AE" if market == "all" else market.upper())
 print(f"\n[scout] ──────────────────────────────────────────")
 print(f"[scout] Markets:     {markets_str}")
-print(f"[scout] Source:      Apify (LinkedIn, bebity/linkedin-jobs-scraper)")
+print(f"[scout] Source:      Apify (LinkedIn, curious_coder/linkedin-jobs-scraper)")
 if intl_age_days:
     print(f"[scout] Window:      UK=24h | other markets={intl_age_days}d (--intl-age override)")
 else:
@@ -356,7 +356,7 @@ if dry_run:
     for entry in apify_searches:
         label, url = entry[0], entry[1]
         per_max = entry[2] if len(entry) == 3 else apify_max_jobs
-        print(f"  • {label:<35} max {per_max} jobs  (bebity actor, $0.001/job)")
+        print(f"  • {label:<35} max {per_max} jobs  (curious_coder actor, $0.001/job)")
         print(f"    {url[:90]}{'...' if len(url) > 90 else ''}")
     print(f"\n[scout] --dry-run: exiting without making any API calls.")
     sys.exit(0)

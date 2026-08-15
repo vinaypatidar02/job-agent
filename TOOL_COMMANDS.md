@@ -4,6 +4,74 @@ All daily-use commands organised by pipeline stage. Run all commands from the pr
 
 ---
 
+## Claude Code Natural Language Triggers
+
+When Claude Code is open in this project, say these phrases — Claude translates them to the right command:
+
+| Phrase | Action |
+|--------|--------|
+| "run scout" | `python3 scripts/run_scout.py --yes` |
+| "run scout [market]" | `python3 scripts/run_scout.py --market [market] --yes` |
+| "run application prep" | `application_prep` agent (all Approved jobs) |
+| "check email" | `python3 scripts/gmail_backfill.py --days 2` |
+| "check email last N days" | `python3 scripts/gmail_backfill.py --days N` |
+| "check email backfill" | `python3 scripts/gmail_backfill.py --days 35` |
+| "retry unmatched emails" | `python3 scripts/gmail_backfill.py --retry-unmatched` |
+| "run referral tracker" | `python3 scripts/referral_tracker.py --push` |
+| "sync to sheet" | `python3 scripts/sheets_sync.py push --tabs apps,archive` |
+| "pull from sheet" | `python3 scripts/sheets_sync.py pull --tabs apps,archive` |
+| "score [job_id]" | `score_job` skill |
+| "draft cover letter [job_id]" | `draft_cover_letter` skill |
+| "draft referral message" | `draft_referral_message` skill (provide contact table) |
+| "draft EOR pitch [job_id]" | `draft_eor_pitch` skill (contract_remote roles only) |
+| "inject manual job" | `inject_manual_jobs` skill |
+| "show outreach / list recruiters" | `python3 scripts/outreach.py list` |
+| "update templates tab" | `python3 scripts/update_templates.py` |
+
+---
+
+## Daily Session Sequence
+
+**Natural language (say in Claude Code — recommended):**
+
+```
+Morning:
+  "check email"                 → check overnight replies
+  "sync to sheet"               → push status updates to Sheet
+  "run scout intl"              → discover new jobs (all international markets)
+  [After scout finishes]:
+  "sync to sheet"               → publish scored results to Sheet
+
+Approval cycle (after reviewing Sheet):
+  "pull from sheet"             → sync your approvals + ATS URLs
+  "run application prep"        → generate CV + cover letter for all Approved jobs
+
+Referral (weekly):
+  "run referral tracker"        → auto-advance stale referrals + sync to Sheet
+```
+
+**Script commands (equivalent, for non-interactive use):**
+
+```bash
+Morning:
+  1. python3 scripts/gmail_backfill.py                         # check overnight replies
+  2. python3 scripts/sheets_sync.py push --tabs apps,archive   # push any status updates
+  3. python3 scripts/run_scout.py --market intl --yes          # discover new jobs
+  4. python3 scripts/write_tracker.py                          # write scored results
+  5. python3 scripts/scout_analysis.py                         # review results + keyword overlap
+  6. python3 scripts/sheets_sync.py push --tabs apps,archive   # publish to Sheet
+
+Approval cycle (after reviewing Sheet):
+  6. python3 scripts/sheets_sync.py pull --tabs apps,archive   # pull approvals + ATS URLs
+  7. [In Claude Code] "run application prep"                    # generate documents
+
+Referral (weekly):
+  8. python3 scripts/referral_tracker.py --push                # advance + sync
+  9. python3 scripts/referral_analysis.py                      # review funnel
+```
+
+---
+
 ## Scout — Discover Jobs
 
 ```bash
@@ -178,52 +246,4 @@ python3 scripts/test_email_tracker.py
 
 # Scout analysis
 python3 scripts/scout_analysis.py                        # keyword overlap matrix + market breakdown
-```
-
----
-
-## Claude Code Natural Language Triggers
-
-When Claude Code is open in this project, these natural language phrases trigger the corresponding scripts or skills:
-
-| Phrase | Action |
-|--------|--------|
-| "run scout" | `python3 scripts/run_scout.py --yes` |
-| "run scout [market]" | `python3 scripts/run_scout.py --market [market] --yes` |
-| "run application prep" | `application_prep` agent (all Approved jobs) |
-| "check email" | `python3 scripts/gmail_backfill.py --days 2` |
-| "check email last N days" | `python3 scripts/gmail_backfill.py --days N` |
-| "check email backfill" | `python3 scripts/gmail_backfill.py --days 35` |
-| "retry unmatched emails" | `python3 scripts/gmail_backfill.py --retry-unmatched` |
-| "run referral tracker" | `python3 scripts/referral_tracker.py --push` |
-| "sync to sheet" | `python3 scripts/sheets_sync.py push --tabs apps,archive` |
-| "pull from sheet" | `python3 scripts/sheets_sync.py pull --tabs apps,archive` |
-| "score [job_id]" | `score_job` skill |
-| "draft cover letter [job_id]" | `draft_cover_letter` skill |
-| "draft referral message" | `draft_referral_message` skill (provide contact table) |
-| "draft EOR pitch [job_id]" | `draft_eor_pitch` skill (contract_remote roles only) |
-| "inject manual job" | `inject_manual_jobs` skill |
-| "show outreach / list recruiters" | `python3 scripts/outreach.py list` |
-| "update templates tab" | `python3 scripts/update_templates.py` |
-
----
-
-## Daily Session Sequence
-
-```
-Morning:
-  1. python3 scripts/gmail_backfill.py                         # check overnight replies
-  2. python3 scripts/sheets_sync.py push --tabs apps,archive   # push any status updates
-  3. python3 scripts/run_scout.py --market intl --yes          # discover new jobs
-  4. python3 scripts/write_tracker.py                          # write scored results
-  5. python3 scripts/scout_analysis.py                         # review results + keyword overlap
-  6. python3 scripts/sheets_sync.py push --tabs apps,archive   # publish to Sheet
-
-Approval cycle (after reviewing Sheet):
-  6. python3 scripts/sheets_sync.py pull --tabs apps,archive   # pull approvals + ATS URLs
-  7. [In Claude Code] "run application prep"                    # generate documents
-
-Referral (weekly):
-  8. python3 scripts/referral_tracker.py --push                # advance + sync
-  9. python3 scripts/referral_analysis.py                      # review funnel
 ```

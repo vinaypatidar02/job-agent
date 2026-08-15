@@ -236,10 +236,71 @@ def step_profession(profile: dict) -> dict:
     return profile
 
 
+def _parse_cv_with_claude(cv_text: str, domains: list[str]) -> str | None:
+    """Send CV text to Claude Haiku and return experience_bank.md formatted content."""
+    try:
+        import anthropic
+        from dotenv import dotenv_values
+        api_key = dotenv_values(ENV_PATH).get("ANTHROPIC_API_KEY", "")
+        if not api_key or api_key == "YOUR_ANTHROPIC_API_KEY":
+            print_warn("ANTHROPIC_API_KEY not set — skipping AI parsing. Fill experience_bank.md manually.")
+            return None
+        domain_tags = ", ".join(f"[{d}]" for d in domains) if domains else "[product] [analytics] [leadership] [data]"
+        prompt = f"""Parse this CV/resume and convert it to an experience_bank.md file.
+
+FORMAT RULES (follow exactly):
+- Each role starts with: ## CompanyName
+- Second line: Job Title | Start–End (e.g. 2022-06–present)
+- Then bullet points in format: • [tag] Action verb + context + specific metric
+- Available tags: {domain_tags}, [leadership], [general]
+- Use the tag that best matches each bullet's domain
+- Preserve ALL numbers and metrics exactly as written — never invent or round
+- Aim for 5-8 bullets per role
+- Skip education, certifications, and skills sections (experience bullets only)
+- Do NOT add any commentary or explanation — output only the markdown
+
+CV TEXT:
+{cv_text[:8000]}"""
+
+        client = anthropic.Anthropic(api_key=api_key)
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=4000,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return response.content[0].text
+    except ImportError:
+        print_warn("anthropic package not installed — skipping AI parsing.")
+        return None
+    except Exception as e:
+        print_warn(f"CV parsing failed: {e} — skipping AI parsing.")
+        return None
+
+
+def _extract_text_from_pdf(path: Path) -> str | None:
+    """Extract plain text from a PDF file using pypdf."""
+    try:
+        from pypdf import PdfReader
+        reader = PdfReader(str(path))
+        return "\n".join(p.extract_text() or "" for p in reader.pages)
+    except ImportError:
+        pass
+    try:
+        import pdfminer.high_level as pdfminer
+        return pdfminer.extract_text(str(path))
+    except ImportError:
+        print_warn("PDF parsing requires pypdf or pdfminer.six — run: pip install pypdf")
+        return None
+    except Exception as e:
+        print_warn(f"PDF extraction failed: {e}")
+        return None
+
+
 def step_experience(profile: dict) -> dict:
     banner("Step 3 of 6 — Work Experience")
     print("The pipeline selects resume bullets from experience_bank.md.")
-    print("We'll create a starter template for you to fill in.\n")
+    print("\nOption A: Provide your existing CV — AI will parse it into a starter experience_bank.md")
+    print("Option B: Enter roles manually — we'll create a template you fill in afterwards\n")
 
     existing_exp = [
         e for e in profile.get("experience", [])
@@ -248,13 +309,54 @@ def step_experience(profile: dict) -> dict:
 
     if existing_exp:
         print(f"  Found {len(existing_exp)} existing role(s). Adding a new role.")
-    else:
-        print("  Let's add your most recent role (you can add more in experience_bank.md).")
 
-    add_exp = ask_yn("Add/confirm work experience now?", True)
-    if not add_exp:
-        print_warn("Skipped. Fill data/content/experience_bank.md and candidate_profile.json → experience manually.")
-        return profile
+    # CV bootstrap path
+    use_cv = ask_yn("Do you have an existing CV/resume to use as a starting point?", True)
+    if use_cv:
+        print("\nProvide your CV as a file path (PDF or .txt) or paste the text directly.")
+        cv_source = ask("File path (e.g. ~/resume.pdf) or press Enter to paste text", "", required=False)
+        cv_text = ""
+        if cv_source:
+            cv_path = Path(cv_source).expanduser()
+            if cv_path.suffix.lower() == ".pdf":
+                cv_text = _extract_text_from_pdf(cv_path) or ""
+            elif cv_path.exists():
+                cv_text = cv_path.read_text(encoding="utf-8", errors="ignore")
+            else:
+                print_warn(f"File not found: {cv_path}")
+        if not cv_text:
+            print("Paste your CV text below. Press Enter twice (blank line) when done:")
+            lines = []
+            while True:
+                line = input()
+                if line == "" and lines and lines[-1] == "":
+                    break
+                lines.append(line)
+            cv_text = "\n".join(lines).strip()
+
+        if cv_text:
+            print("\n[AI] Parsing your CV into experience_bank.md format...")
+            domains = profile.get("domains", {}).get("primary", []) + profile.get("domains", {}).get("secondary", [])
+            parsed = _parse_cv_with_claude(cv_text, domains)
+            if parsed:
+                header = _experience_bank_header()
+                with EXPERIENCE_PATH.open("w", encoding="utf-8") as f:
+                    f.write(header)
+                    f.write(parsed)
+                print_ok(f"Created: {EXPERIENCE_PATH.relative_to(ROOT)}")
+                print(f"\n  {YELLOW}Review experience_bank.md — verify metrics, add tags, remove any errors.{RESET}")
+                print(f"  Format: • [tag] Action verb + context + metric")
+                return profile
+            else:
+                print_warn("AI parsing unavailable — falling back to manual template.")
+        else:
+            print_warn("No CV text provided — falling back to manual template.")
+
+    if not use_cv or not EXPERIENCE_PATH.exists():
+        add_exp = ask_yn("Add work experience manually now?", True)
+        if not add_exp:
+            print_warn("Skipped. Fill data/content/experience_bank.md and candidate_profile.json → experience manually.")
+            return profile
 
     roles = list(existing_exp)
     print("\nMost recent role:")
@@ -617,8 +719,8 @@ def _print_env_summary() -> None:
     print("""
   ANTHROPIC_API_KEY   — console.anthropic.com → API Keys
   APIFY_TOKEN         — console.apify.com → Settings → Integrations
-  YAHOO_EMAIL         — your IMAP email address
-  YAHOO_APP_PASSWORD  — generate at security.yahoo.com → App passwords
+  IMAP_EMAIL          — your email address (Yahoo, Gmail, Outlook, or any IMAP provider)
+  IMAP_APP_PASSWORD   — App Password from your email provider's security settings
   GOOGLE_SHEET_ID     — from your Google Sheet URL (the long ID in the middle)
 """)
 

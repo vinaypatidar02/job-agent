@@ -45,7 +45,7 @@
             → sheets_sync push → scout_analysis → git commit + push
   Secrets:  All API keys stored as GitHub Actions repository secrets
             (Settings → Secrets and variables → Actions)
-  Required secrets: ANTHROPIC_API_KEY, APIFY_TOKEN, YAHOO_EMAIL, YAHOO_APP_PASSWORD,
+  Required secrets: ANTHROPIC_API_KEY, APIFY_TOKEN, IMAP_EMAIL, IMAP_APP_PASSWORD,
                     GOOGLE_SHEET_ID, GOOGLE_SA_JSON, GIT_USER_EMAIL, GIT_USER_NAME
   Optional secrets: GITHUB_REPO (format: username/repo — for CI monitoring only)
 
@@ -101,7 +101,7 @@
 #   5. TRACK (automated, on demand)
 #      Say: "check email" or "check email last N days" in Claude Code
 #      → Claude runs: python3 scripts/gmail_backfill.py --days N
-#      → Connects to your IMAP inbox (configured via YAHOO_EMAIL + YAHOO_APP_PASSWORD in .env)
+#      → Connects to your IMAP inbox (configured via IMAP_EMAIL + IMAP_APP_PASSWORD in .env)
 #      → Classifies each email via Claude API → fuzzy-matches to tracker
 #      → Status updates flow: Applied → Under Review → Interview → Offer/Rejected
 #      → Pushes to Google Sheet automatically

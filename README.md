@@ -167,6 +167,19 @@ rubric, market config, and candidate profile — so every interaction is aware o
 - **Deterministic + LLM split**: free Python rules filter ~40-60% of jobs before any API call
 - **Extensible**: add markets, validation checks, and scoring rules without touching core scripts
 
+## Everything Is Customisable
+
+Every behaviour in the pipeline can be changed — no aspect is hardcoded for a specific profession, country, or workflow:
+
+- **New markets in minutes**: add a geoId, salary threshold, city tier scoring, and visa address — 5 config edits, no code change. See GUIDE.md §6g.
+- **Scoring behaviour**: edit `docs/fit-scoring-rubric.md` directly, or just say in Claude Code: *"adjust shortlist threshold to 80"* or *"add a rule that rejects roles without SQL"*
+- **Validation rules**: say *"add a validation check that blocks [condition]"* in Claude Code — new checks are added to `scripts/validate_prep.py` automatically
+- **Title blocklists, language gates, salary thresholds**: all live in `data/content/candidate_profile.json` — edit once, applies everywhere
+- **Automation hooks**: `hooks/` directory controls what runs automatically on job approval or email receipt — edit or disable any hook
+- **Default pipeline behaviour**: `CLAUDE.md` and `agents/*.md` define how Claude interprets your requests — edit these to change how the AI behaves in your project session
+
+Claude reads `CLAUDE.md` at session start, so it always knows your full setup. Most customisations can be done conversationally: *"change my target salary for Germany to €95,000"* — no file editing required.
+
 ## What you need to configure
 
 1. Fill `.env` with your API keys (see `.env.example`)

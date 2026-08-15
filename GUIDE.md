@@ -44,7 +44,7 @@ flowchart TD
     A["🔍 Configure LinkedIn\nSearch URLs\n(run_scout.py)"] --> B
 
     subgraph SCOUT ["Job Discovery — run once daily or on demand"]
-        B["Apify Scraper\n[DET] $0.001/job\n(bebity/linkedin-jobs-scraper)"] --> C
+        B["Apify Scraper\n[DET] $0.001/job\n(curious_coder/linkedin-jobs-scraper)"] --> C
         C["Pass 1 Gates\n[DET] Free\nAge · Title · Language · Blocklist · Dedup"] --> D
         D{Passed?}
         D -- Rejected --> E["auto_rejected.json\n(not tracked)"]
@@ -268,8 +268,8 @@ nano .env    # or open in any editor
 |----------|----------------|
 | `ANTHROPIC_API_KEY` | [console.anthropic.com](https://console.anthropic.com) → API Keys |
 | `APIFY_TOKEN` | console.apify.com → Settings → Integrations → API token |
-| `YAHOO_EMAIL` | Your email address used for job application tracking |
-| `YAHOO_APP_PASSWORD` | security.yahoo.com → App passwords (or equivalent for Gmail) |
+| `IMAP_EMAIL` | Your email address used for job application tracking |
+| `IMAP_APP_PASSWORD` | security.yahoo.com → App passwords (or equivalent for Gmail) |
 | `GOOGLE_SHEET_ID` | From Sheet URL: `docs.google.com/spreadsheets/d/[THIS_PART]/edit` |
 
 **Optional variables:**
@@ -329,9 +329,16 @@ See `CONFIGURATION.md` for all available fields and their effects on scoring, PD
 
 ### Step 4: Write experience_bank.md
 
-Open `data/content/experience_bank.md`. This is where **all resume bullets come from**. The pipeline selects from this file — it never generates new content.
+`data/content/experience_bank.md` is where **all resume bullets come from**. The pipeline selects from this file — it never generates new content.
 
-**Format:**
+**Option A — AI bootstrap from your existing CV (recommended):**
+setup_wizard.py Step 3 now offers to parse your existing CV. When prompted:
+1. Provide a file path to your PDF or .txt CV, or paste the text directly
+2. Claude Haiku parses it into the correct experience_bank.md format with domain tags
+3. Review the output — verify metrics, adjust tags, remove any parsing errors
+
+**Option B — Write manually:**
+
 ```markdown
 ## Company Name    ← must match bank_key in candidate_profile.json
 
@@ -342,7 +349,7 @@ Your Job Title | 2022-06–present
 • [tag] Leadership, mentoring, or strategic contribution
 ```
 
-**Rules:**
+**Rules (apply to both options):**
 - Only include achievements you can defend in an interview
 - Tags must match keywords in your `candidate_profile.json → domains` section
 - Aim for 6–10 bullets per role — the pipeline selects the most relevant ones per job

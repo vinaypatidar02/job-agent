@@ -7,7 +7,7 @@
 # Gmail MCP (mcp__claude_ai_Gmail__*) is NOT used for email checking.
 # It requires local OAuth that must be re-established each session.
 # Instead, all email checking goes through Yahoo IMAP using
-# YAHOO_EMAIL and YAHOO_APP_PASSWORD from .env — always available,
+# IMAP_EMAIL and IMAP_APP_PASSWORD from .env — always available,
 # no session auth required.
 #
 # NEVER use Gmail MCP tools for email reading. Always delegate to

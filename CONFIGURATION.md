@@ -13,9 +13,9 @@ Create `.env` from `.env.example`: `cp .env.example .env`
 |----------|----------|-------------|-------------|
 | `ANTHROPIC_API_KEY` | Yes | console.anthropic.com → API Keys | Used by score_jobs.py, generate_covers.py, generate_summaries.py. Separate billing from Claude Code subscription. |
 | `APIFY_TOKEN` | Yes | console.apify.com → Settings → Integrations | Authenticates the LinkedIn Jobs Scraper actor. $5/month free credit on free tier. |
-| `APIFY_LINKEDIN_ACTOR` | Yes | Keep as-is | Default: `bebity/linkedin-jobs-scraper`. Change only if you switch actors. |
-| `YAHOO_EMAIL` | Yes | Your Yahoo email address | Used by gmail_backfill.py for IMAP login. Also works with Gmail/Outlook — see IMAP section below. |
-| `YAHOO_APP_PASSWORD` | Yes | security.yahoo.com → Security → App Passwords → Generate | App-specific password — NOT your main password. Required even with 2FA enabled. |
+| `APIFY_LINKEDIN_ACTOR` | Yes | Keep as-is | Default: `curious_coder/linkedin-jobs-scraper`. Change only if you switch actors. |
+| `IMAP_EMAIL` | Yes | Your email address (Yahoo, Gmail, Outlook, or any IMAP provider) | Used by gmail_backfill.py for IMAP login — see IMAP section below. |
+| `IMAP_APP_PASSWORD` | Yes | App Password from your email provider's security settings | App-specific password — NOT your main password. Required even with 2FA enabled. |
 | `GOOGLE_SHEET_ID` | Yes | From Sheet URL: `docs.google.com/spreadsheets/d/[ID]/edit` | The ID portion of your Google Sheets URL. |
 | `GITHUB_TOKEN` | Yes (for git_sync.py) | github.com/settings/tokens → Generate new token (classic) → repo scope | Used by git_sync.py to push pipeline data. Optional if you push manually. |
 | `GITHUB_REPO` | No | Your repo: `username/repo-name` | Used by monitor_scout.py to show CI run status. Leave blank to disable CI monitoring. |
@@ -31,8 +31,7 @@ The setup wizard Step 1 asks for your email provider and updates `gmail_backfill
 # Outlook:          IMAP_HOST = "outlook.office365.com"    IMAP_PORT = 993
 ```
 
-Yahoo is recommended: simplest app password flow, no OAuth complexity.
-Gmail requires enabling IMAP in Gmail settings and generating an App Password (not your Google password).
+Yahoo and Gmail are both straightforward. Gmail requires enabling IMAP in Gmail settings and generating an App Password (not your Google password). setup_wizard.py configures the correct host/port automatically.
 
 ---
 

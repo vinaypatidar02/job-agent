@@ -344,10 +344,10 @@ def retry_unmatched(env: dict, dry_run: bool):
     if skipped:
         print(f"[retry] Skipping {len(skipped)} older entries without uid (run fresh backfill to re-capture).")
 
-    yahoo_email = env.get("YAHOO_EMAIL", "")
-    yahoo_pass  = env.get("YAHOO_APP_PASSWORD", "")
+    yahoo_email = env.get("IMAP_EMAIL", env.get("YAHOO_EMAIL", ""))
+    yahoo_pass  = env.get("IMAP_APP_PASSWORD", env.get("YAHOO_APP_PASSWORD", ""))
     if not yahoo_email or not yahoo_pass:
-        print("ERROR: YAHOO_EMAIL and YAHOO_APP_PASSWORD must be set in .env")
+        print("ERROR: IMAP_EMAIL and IMAP_APP_PASSWORD must be set in .env")
         return
 
     try:
@@ -509,19 +509,19 @@ def main():
     if "--retry-unmatched" in args:
         print(f"\n{'='*60}")
         print(f"  Email Backfill — Retry Unmatched  |  {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-        print(f"  Mode: {'DRY RUN — ' if dry_run else ''}retry-unmatched  |  Yahoo IMAP")
+        print(f"  Mode: {'DRY RUN — ' if dry_run else ''}retry-unmatched  |  IMAP")
         print(f"{'='*60}\n")
         retry_unmatched(env, dry_run)
         return
 
     print(f"\n{'='*60}")
     print(f"  Email Backfill — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    print(f"  Mode: {'DRY RUN — ' if dry_run else ''}last {days} days  |  Yahoo IMAP")
+    print(f"  Mode: {'DRY RUN — ' if dry_run else ''}last {days} days  |  IMAP")
     print(f"{'='*60}\n")
-    yahoo_email = env.get("YAHOO_EMAIL", "")
-    yahoo_pass  = env.get("YAHOO_APP_PASSWORD", "")
+    yahoo_email = env.get("IMAP_EMAIL", env.get("YAHOO_EMAIL", ""))
+    yahoo_pass  = env.get("IMAP_APP_PASSWORD", env.get("YAHOO_APP_PASSWORD", ""))
     if not yahoo_email or not yahoo_pass:
-        print("ERROR: YAHOO_EMAIL and YAHOO_APP_PASSWORD must be set in .env")
+        print("ERROR: IMAP_EMAIL and IMAP_APP_PASSWORD must be set in .env")
         sys.exit(1)
 
     # ── Pull latest Sheet edits into tracker ─────────────────────────────────
@@ -539,14 +539,14 @@ def main():
     processed_ids = load_processed()
     verdict_cache = load_verdicts()
 
-    # Connect to Yahoo IMAP
-    print(f"[hook] Connecting to Yahoo IMAP ({IMAP_HOST})...")
+    # Connect via IMAP
+    print(f"[hook] Connecting to IMAP ({IMAP_HOST})...")
     try:
         imap = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT)
         imap.login(yahoo_email, yahoo_pass)
     except Exception as e:
         print(f"ERROR: IMAP login failed — {e}")
-        print("Check YAHOO_APP_PASSWORD in .env (generate at security.yahoo.com → App passwords)")
+        print("Check IMAP_APP_PASSWORD in .env — use an App Password if your provider requires one")
         sys.exit(1)
     print("[hook] Connected OK")
 

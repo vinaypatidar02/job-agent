@@ -398,6 +398,6 @@
 # ─────────────────────────────────────────────────────────────
 # 11. MCP SERVER CONFIGURATION — see scripts/CLAUDE.md
 # ─────────────────────────────────────────────────────────────
-[CONTEXT] Apify actor: bebity/linkedin-jobs-scraper ($0.001/job, 24h cache in data/apify_cache/).
-  Email: Yahoo IMAP via gmail_backfill.py (configure YAHOO_EMAIL + YAHOO_APP_PASSWORD in .env).
+[CONTEXT] Apify actor: curious_coder/linkedin-jobs-scraper ($0.001/job, 24h cache in data/apify_cache/).
+  Email: Yahoo IMAP via gmail_backfill.py (configure IMAP_EMAIL + IMAP_APP_PASSWORD in .env).
   Full MCP config details in scripts/CLAUDE.md.
