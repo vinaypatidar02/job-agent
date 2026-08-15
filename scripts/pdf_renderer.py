@@ -464,7 +464,7 @@ def _check_page_count(path: str, max_pages: int = 2):
         pages = len(re.findall(rb'/Type\s*/Page[^s]', data))
         if pages > max_pages:
             print(f"[pdf_renderer] ⚠ RESUME IS {pages} PAGES (limit: {max_pages}). "
-                  f"Trim bullets from earliest role (Coviam) and re-render.")
+                  f"Trim bullets from your earliest role or reduce max_bullets in candidate_profile.json.")
     except Exception:
         pass
 

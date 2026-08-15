@@ -61,8 +61,11 @@ python3 scripts/sheets_sync.py pull --tabs apps,archive
 # Run directly by app_id (for specific jobs)
 python3 scripts/run_prep.py --keys app_001,app_002,app_003
 
-# Validate prep output before PDF render
-python3 scripts/validate_prep.py --job_id app_001
+# Auto prep (domain detection + bullet selection + JSON output — runs before generate_*)
+python3 scripts/auto_prep.py
+
+# Enrich jobs (salary parse, work_mode, ATS URL — runs after scout before scoring)
+python3 scripts/enrich_jobs.py
 
 # Generate profile summaries (Haiku batch — runs after auto_prep.py)
 python3 scripts/generate_summaries.py
@@ -72,6 +75,15 @@ python3 scripts/generate_summaries.py --keys app_001,app_002   # specific apps o
 
 # Generate cover letter paragraphs (Sonnet batch — runs after auto_prep.py)
 python3 scripts/generate_covers.py
+
+# Merge LLM cover letter paragraphs into final structured JSON
+python3 scripts/finalize_cover.py
+
+# Merge LLM resume sections into final structured JSON
+python3 scripts/finalize_resumes.py
+
+# Validate prep output before PDF render
+python3 scripts/validate_prep.py --job_id app_001
 
 # Test PDF renderer layout (no app data needed)
 python3 scripts/pdf_renderer.py test
@@ -128,6 +140,15 @@ python3 scripts/monitor_scout.py             # Apify credit usage + GitHub Actio
 # Sponsor register (manual audit — not required for scoring)
 python3 scripts/sponsor_register.py refresh-uk
 python3 scripts/sponsor_register.py status
+
+# Outreach tracker (recruiter contacts + job platforms)
+python3 scripts/outreach.py list                              # show all platforms + recruiters
+python3 scripts/outreach.py list --type platforms            # platforms only
+python3 scripts/outreach.py list --type recruiters           # recruiters only
+python3 scripts/outreach.py list --market nl                 # filter recruiters by market
+
+# Templates tab (update after any contact table format change)
+python3 scripts/update_templates.py                          # regenerate Sheet Templates tab
 ```
 
 ---
@@ -182,6 +203,8 @@ When Claude Code is open in this project, these natural language phrases trigger
 | "draft referral message" | `draft_referral_message` skill (provide contact table) |
 | "draft EOR pitch [job_id]" | `draft_eor_pitch` skill (contract_remote roles only) |
 | "inject manual job" | `inject_manual_jobs` skill |
+| "show outreach / list recruiters" | `python3 scripts/outreach.py list` |
+| "update templates tab" | `python3 scripts/update_templates.py` |
 
 ---
 
@@ -193,7 +216,8 @@ Morning:
   2. python3 scripts/sheets_sync.py push --tabs apps,archive   # push any status updates
   3. python3 scripts/run_scout.py --market intl --yes          # discover new jobs
   4. python3 scripts/write_tracker.py                          # write scored results
-  5. python3 scripts/sheets_sync.py push --tabs apps,archive   # publish to Sheet
+  5. python3 scripts/scout_analysis.py                         # review results + keyword overlap
+  6. python3 scripts/sheets_sync.py push --tabs apps,archive   # publish to Sheet
 
 Approval cycle (after reviewing Sheet):
   6. python3 scripts/sheets_sync.py pull --tabs apps,archive   # pull approvals + ATS URLs

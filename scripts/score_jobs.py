@@ -453,9 +453,15 @@ _IE_REJECT = {"northern ireland", "belfast", "derry", "londonderry"}
 # EXAMPLES (software):  {"engineer", "developer", "architect", "programmer"}
 # EXAMPLES (finance):   {"finance", "financial", "fp&a", "treasury", "controller"}
 # EXAMPLES (product mgmt): {"product", "growth", "platform", "strategy"}
-ANALYTICS_TITLE_KW = {
-    "analytic", "analyst", "data", "insight",
-    "bi manager", "bi lead", "bi director", "decision scientist",
+TARGET_TITLE_KEYWORDS: set[str] = {
+    # Fill with keywords that describe YOUR target roles.
+    # A stale job with NO matching title keyword is silently dropped (not tracked).
+    # EXAMPLES (analytics): {"analytic", "analyst", "data", "insight"}
+    # EXAMPLES (software):  {"engineer", "developer", "architect", "programmer"}
+    # EXAMPLES (finance):   {"finance", "financial", "fp&a", "treasury", "controller"}
+    # EXAMPLES (product mgmt): {"product", "growth", "platform", "strategy"}
+    # Replace the placeholder values below with your own keywords:
+    "your_target_keyword_1", "your_target_keyword_2",
 }
 
 # TITLE_REJECT_CONTAINS: Always reject if job title contains any of these strings.
@@ -463,39 +469,14 @@ ANALYTICS_TITLE_KW = {
 # EXAMPLES (analytics): ["engineer", "architect", "director", "data science", "governance"]
 # EXAMPLES (software):  ["qa ", "scrum master", "project manager", "business analyst"]
 # EXAMPLES (finance):   ["payroll", "accounts payable", "accounts receivable", "bookkeeper"]
-TITLE_REJECT_CONTAINS = [
-    # ── Broad keyword blocks (each subsumes several specific patterns) ────────
-    "engineer",     # data/software/ML/cloud/platform/BI/AI-enablement engineers — not analytics leadership
-                    # tradeoff: "Senior Analytics Engineer" (Tier 2 today) — not in target role list,
-                    # below seniority target, Gate 6 catches analytics_engineering role_focus anyway
-    "architect",    # solutions/data/cloud/analytics architects — not analytics leadership
-    "director",     # Director-level roles — above target seniority per CLAUDE.md (VP+)
-                    # tradeoff: UK bank "Associate Director" (sometimes Sr Manager equiv) — acceptable
-    "governance",   # data/AI governance roles — always non-analytics
-    "devops",       # DevOps Manager/Lead beyond "devops engineer"
-    # ── Analyst role types that are never target roles ────────────────────────
-    "site reliability",
-    "hr analyst", "people analyst", "payroll analyst", "payroll manager",
-    "paid social", "seo analyst", "seo manager", "digital marketing analyst",
-    "cro specialist", "cro consultant", "financial analyst", "finance analyst",
-    "bi developer", "etl developer",
-    "data science", "scientist", "graduate analyst",
-    # ── Non-analytics operational/strategy titles ─────────────────────────────
-    "revenue operations manager", "revenue operations lead",    # RevOps = Salesforce/CRM ops
-    "business operations manager", "business operations lead",  # BizOps without analytics
-    "regional operations manager", "regional operations lead",  # Regional/field ops ≠ analytics (e.g. Uber)
-    "product owner",                                            # PO = product management, not analytics leadership
-    "project manager", "programme manager",                     # PM ≠ analytics lead; "Project Mgr - AI Enablement" false-fired at 15 pts
-    "talent acquisition", "talent partner",                     # HR/recruiting
-    "people operations", "people partner",                      # HR
-    "commercial transformation",                                # Strategy consulting type
-    # ── Accounting / finance domain ───────────────────────────────────────────
-    "statutory reporting", "accounts payable", "accounts receivable",
-    "financial accountant", "fp&a", "actuarial",
-    # ── Supply chain / infrastructure ops ────────────────────────────────────
-    "demand manager", "data center operations", "data centre operations",
-    # ── Customer success / services ops ──────────────────────────────────────
-    "customer success manager",
+TITLE_REJECT_CONTAINS: list[str] = [
+    # Add job title substrings that you NEVER want to see — lower-case, substring match.
+    # A title matching any of these is rejected immediately (Pass 1, free, no API cost).
+    # Leave empty to disable title-level rejection (Claude Pass 2 handles all filtering).
+    # EXAMPLES (analytics): ["engineer", "architect", "devops", "data science", "hr analyst"]
+    # EXAMPLES (software):  ["qa engineer", "scrum master", "project manager", "business analyst"]
+    # EXAMPLES (finance):   ["payroll", "accounts payable", "bookkeeper", "actuarial"]
+    # EXAMPLES (product):   ["graduate", "intern", "junior product manager", "scrum master"]
 ]
 
 # ── Language detection gate (NL/SE only) ─────────────────────────────────────
@@ -572,8 +553,10 @@ _GERMAN_TITLE_WORDS = [
 # EXAMPLE (Sweden whitelist): {"se": {"spotify", "klarna", "ikea", "h&m", "volvo"}}
 # EXAMPLE (no restrictions):  {} (empty dict = all markets open)
 _MARKET_BRAND_ALLOWLIST: dict[str, set] = {
-    # Replace with your own allowlist, or leave empty:
-    "se": {"spotify", "klarna", "volvo cars", "ericsson", "king", "epidemic sound", "scania"},
+    # Add markets where you ONLY want to apply to specific companies.
+    # Leave empty (default) to allow all companies in all markets.
+    # EXAMPLE — restrict Sweden to a shortlist: {"se": {"spotify", "klarna", "ikea"}}
+    # EXAMPLE — no restrictions (default):      {}
 }
 _SE_ALLOWED = _MARKET_BRAND_ALLOWLIST.get("se", set())  # backward-compat alias
 
@@ -599,21 +582,16 @@ _PERMANENT_DESPITE_JOB_TYPE: set[str] = set()
 # EXAMPLES (non-consulting seekers): {"mckinsey", "bcg", "bain & company", "deloitte"}
 # EXAMPLES (direct-hire only):       {"harnham", "michael page", "hays", "robert half"}
 # Leave empty to allow all company types.
-_CONSULTING_BLOCKLIST_SUBSTRINGS: set[str] = {
-    "deloitte",
-    "pwc", "pricewaterhousecoopers",
-    "kpmg",
-    "mckinsey",
-    "boston consulting group",
-    "roland berger",
-    "oliver wyman",
-    "bain & company", "bain and company",
-    "kearney",
-    "arthur d. little", "arthur d little",
-}
-# EY handled separately — "ey" is too short for a substring match (false-positives).
-_EY_EXACT      = {"ey", "ey-parthenon"}
-_EY_SUBSTRINGS = ("ernst & young", "ernst and young", "ernst&young")
+_CONSULTING_BLOCKLIST_SUBSTRINGS: set[str] = set()
+# Add company name substrings (lower-case) for company types you want to fast-reject.
+# Saves Pass 2 API cost. Leave empty to allow all companies (default).
+# EXAMPLES (if avoiding consulting firms): {"mckinsey", "bcg", "bain & company", "deloitte"}
+# EXAMPLES (if avoiding recruiters):       {"hays", "michael page", "robert half"}
+
+# Short company names that need exact matching to avoid false positives.
+# Add entries if you are using _CONSULTING_BLOCKLIST_SUBSTRINGS above.
+_EY_EXACT:      set[str] = set()
+_EY_SUBSTRINGS: tuple     = ()
 
 def _is_mgmt_consulting_company(company_name: str) -> bool:
     co = company_name.lower().strip()
@@ -631,9 +609,12 @@ def _is_mgmt_consulting_company(company_name: str) -> bool:
 # EXAMPLES (analytics): ["sap analyst", "sap bi analyst", "powerbi analyst", "tableau developer"]
 # EXAMPLES (software):  ["cobol developer", "fortran programmer", "mainframe developer"]
 # EXAMPLES (finance):   ["sap fi consultant", "oracle financials analyst"]
-_SAP_PRIMARY_TITLE_KW = [
-    "sap analyst", "sap data analyst", "sap bi analyst", "sap bi developer",
-    "sap reporting analyst", "sap functional analyst", "sap hana analyst",
+TOOLING_PRIMARY_TITLE_BLOCKLIST: list[str] = [
+    # Add job title substrings for roles where a specific tool IS the entire job.
+    # Use when you see title-first tool roles you never want to apply to.
+    # EXAMPLES (analytics): ["sap analyst", "sap bi analyst", "powerbi developer", "tableau developer"]
+    # EXAMPLES (software):  ["cobol developer", "mainframe developer", "fortran programmer"]
+    # EXAMPLES (finance):   ["sap fi consultant", "oracle financials analyst"]
 ]
 
 # ── classify_title import for Tier-4 Pass 1 gate ─────────────────────────────
@@ -1434,15 +1415,15 @@ def pass1_filter(job: dict) -> tuple[str, str]:
 
     # 1. Posting age (from LinkedIn posted_date — poster-declared)
     #    >MAX_AGE days → hard reject (not worth tracking at all)
-    #    >STALE_AGE_DAYS days → Stale ONLY if title is analytics-relevant;
+    #    >STALE_AGE_DAYS days → Stale ONLY if title matches TARGET_TITLE_KEYWORDS;
     #                           otherwise reject (no value logging off-topic stale jobs)
     if _posting_too_old(posted):
         return "reject", f"Posting too old (posted {posted}, >{MAX_AGE}d)"
     _stale_thr = _get_stale_threshold(market)
     if _posting_is_stale(posted, _stale_thr):
-        if any(kw in title for kw in ANALYTICS_TITLE_KW):
+        if any(kw in title for kw in TARGET_TITLE_KEYWORDS):
             return "stale", f"Posting is stale (posted {posted}, >{_stale_thr}d old)"
-        return "reject", f"Stale + non-analytics title (posted {posted}, >{_stale_thr}d old)"
+        return "reject", f"Stale + off-target title (posted {posted}, >{_stale_thr}d old)"
 
     # 2. Work type (from LinkedIn structured fields — poster-declared)
     # Detect remote/contract signals for salary gate adjustment; no longer hard-reject.
@@ -1653,12 +1634,12 @@ def pass1_filter(job: dict) -> tuple[str, str]:
                 f"'{job.get('job_title', '')}' — {_tier_reason}"
             )
 
-    # 6b. SAP-primary title gate (title-level only — clear tooling-first signal)
-    # Only blocks when SAP is the defining technology in the title itself.
-    # JD-level SAP-primary detection is handled by Claude in Pass 2.
-    for _sap_kw in _SAP_PRIMARY_TITLE_KW:
-        if _sap_kw in title:
-            return "reject", f"SAP-primary title: '{job.get('job_title', '')}'"
+    # 6b. Tooling-primary title gate (title-level only — clear tooling-first signal)
+    # Blocks when a specific tool/technology is the defining term in the title itself.
+    # JD-level tooling detection is handled by Claude in Pass 2.
+    for _tool_kw in TOOLING_PRIMARY_TITLE_BLOCKLIST:
+        if _tool_kw in title:
+            return "reject", f"Tooling-primary title: '{job.get('job_title', '')}'"
 
     # 6c. Non-analytics "Business Partner" titles — deterministic Pass 1 gate.
     # "Commercial Business Partner", "HR Business Partner", "Sales Business Partner" etc.

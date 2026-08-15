@@ -93,7 +93,7 @@ def check_c1_files():
               "Ensure all pipeline files are present before running")
     elif missing_setup:
         _fail("C1 Required files", f"{len(missing_setup)} setup file(s) not found: {', '.join(missing_setup)}",
-              "Copy .env.example → .env and fill in your API keys (see CONFIGURE_CHECKLIST.md Step 1)")
+              "Copy .env.example → .env and fill in your API keys (see GUIDE.md §4 Step 2)")
     else:
         _pass("C1 Required files", f"{len(required) + len(setup_files)}/{len(required) + len(setup_files)}")
 

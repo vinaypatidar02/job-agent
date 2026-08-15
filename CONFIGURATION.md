@@ -1,7 +1,7 @@
 # CONFIGURATION.md — Full Parameter Reference
 
 Complete reference for every configurable parameter in the pipeline.
-For a step-by-step setup checklist, see CONFIGURE_CHECKLIST.md.
+For a step-by-step setup guide, see GUIDE.md §4.
 
 ---
 
@@ -57,8 +57,9 @@ Dictionary mapping market codes to address suffix strings. The suffix appears in
 
 ```json
 "visa_addresses": {
-  "uk": "India | Seeking Skilled Worker Visa Sponsorship",
-  "nl": "India | Seeking Kennismigrant Sponsorship"
+  "uk": "[YOUR_COUNTRY] | Seeking Skilled Worker Visa Sponsorship",
+  "nl": "[YOUR_COUNTRY] | Seeking Kennismigrant Sponsorship",
+  "de": "[YOUR_COUNTRY] | Seeking EU Blue Card Sponsorship"
 }
 ```
 
@@ -161,6 +162,11 @@ Resume headline and subtitle per domain. Maps domain keys (above) to headline va
 ```
 
 Tags used to label bullets in experience_bank.md. A bullet tagged `[backend]` will be selected when domain = "primary" (if "backend" is in that domain's keywords).
+
+**Field interdependency**: `resume_tags` → `domains` → `experience_bank.md` must be consistent:
+- Tags listed in `resume_tags.tags` must appear as `[tag]` prefixes in experience_bank.md bullets
+- A domain's `keywords` determine which tags get selected for that domain (e.g. if domain "primary" has keyword "backend", bullets tagged `[backend]` are favoured)
+- Tags in experience_bank.md that are not in `resume_tags.tags` are still selectable as generic bullets
 
 ### profile
 

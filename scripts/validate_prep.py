@@ -442,7 +442,7 @@ def check_v11_role_quantification(resume: dict):
             continue
         bank_q, bank_total = ratio_pair
         if bank_q == 0:
-            continue  # Independent / Quinbay — no impact bullets in bank, skip
+            continue  # No impact bullets in bank for this company — skip ratio check
         bullets = role.get("bullets", [])
         n = len(bullets)
         expected_min = max(1, round(n * bank_q / bank_total))
@@ -713,7 +713,7 @@ def check_v18_pronoun(resume: dict):
     if m:
         _fail("V18 Third-person pronoun in summary",
               f"Found '{m.group(0)}' — summary must not use 'his'/'her'.",
-              "Rephrase: e.g. 'during his Coviam/Quinbay tenure' → 'during the Coviam/Quinbay tenure'.")
+              "Rephrase: e.g. 'during his [Company] tenure' → 'during the [Company] tenure'.")
     else:
         _pass("V18 Third-person pronoun", "No 'his'/'her' in summary")
 

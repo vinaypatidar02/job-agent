@@ -1,9 +1,10 @@
 # Claude Workflow Automation — AI-Powered Job Search Pipeline
 
-> **CONVERSION NOTICE:** This library was converted from a personal analytics job search pipeline
-> into a general-purpose tool. All personal data has been removed. You may occasionally find
-> analytics-specific references — update them to match your profession.
-> Before going live: complete CONFIGURE_CHECKLIST.md, run `check_workflow.py`, and do a dry run.
+> **⚠️ IMPORTANT: Read GUIDE.md before your first run.**
+> This pipeline was converted from a personal analytics job-search project.
+> It has been thoroughly generalised, but you may encounter analytics/UK-specific
+> examples in edge cases. Complete GUIDE.md §4 (Setup), run `check_workflow.py`,
+> then do a `--dry-run` before spending any API credit.
 
 A production-grade, fully autonomous job search pipeline built on Claude Code, Apify, and
 the Anthropic API. Originally built as a personal tool, open-sourced for any job seeker in
@@ -12,30 +13,52 @@ any profession.
 ## What it does
 
 - Scrapes LinkedIn jobs daily via Apify across 7 markets (UK, NL, DE, DK, IE, SE, UAE)
-- Scores every job in two passes: Python rules (free) then Claude Haiku batch API
-- Generates tailored resumes and cover letters as ATS-safe PDFs
+- Scores every job in two passes: Python rules (free) then Claude Haiku batch API (~$0.05–0.15/run)
+- Generates tailored resumes and cover letters as ATS-safe PDFs (~$0.05–0.12/application)
 - Tracks application status automatically from email replies
 - Syncs everything to Google Sheets as a human-readable dashboard
 - Manages referral outreach: drafts LinkedIn messages and tracks contact responses
 
 ## Architecture
 
+**[DET]** = Deterministic Python — free, reproducible. **[LLM]** = Claude API — inference cost noted.
+
 ```mermaid
 flowchart TD
-    A[LinkedIn / Apify] -->|scrape| B[run_scout.py]
-    B -->|raw jobs| C[enrich_jobs.py]
-    C -->|enriched| D["score_jobs.py\nPass 1: Python rules\nPass 2: Claude Haiku batch"]
-    D -->|scored_jobs.json| E[write_tracker.py]
-    E -->|job_tracker.json| F[sheets_sync.py push]
-    F -->|Google Sheet| G{Human Review}
-    G -->|Approve + add ATS URL| H[sheets_sync.py pull]
-    H -->|Approved status| I["application_prep agent\nauto_prep.py"]
-    I -->|resume JSON + cover JSON| J["generate_summaries.py\ngenerate_covers.py"]
-    J -->|LLM output| K["finalize_cover.py\nfinalize_resumes.py"]
-    K -->|final JSONs| L["pdf_renderer.py\nReportLab ATS-safe PDF"]
-    L -->|ready/ folder| M{Apply / Refer}
-    M -->|email reply| N["gmail_backfill.py\nIMAP + Claude classifier"]
-    N -->|status update| E
+    A["🔍 LinkedIn Search URLs\n(configure in run_scout.py)"] --> B
+
+    subgraph SCOUT ["Job Discovery"]
+        B["Apify Scraper\n[DET] $0.001/job"] --> C
+        C["Pass 1 Gates\n[DET] Free\nAge · Title · Language · Blocklist · Dedup"] --> D
+        D{Passed?}
+        D -- Rejected --> E["auto_rejected.json"]
+        D -- Passed --> F["Enrichment\n[DET] Free\nSalary · Work mode · ATS URL"]
+        F --> G["Pass 2 Scoring\n[LLM — Haiku Batch]\n~$0.002–0.005/job\nFit 0–100 · Visa · Pros/cons"]
+    end
+
+    G --> H{Score?}
+    H -- "< 60 or visa denied" --> E
+    H -- "60–74" --> I["Review Needed\njob_tracker.json"]
+    H -- "≥ 75" --> J["Shortlisted\njob_tracker.json"]
+
+    I --> K["📊 Google Sheet\n[DET] sheets_sync.py push"]
+    J --> K
+    K --> L["👤 You: Review · Approve · Paste ATS URL"]
+    L --> M["Pull from Sheet [DET]"]
+
+    subgraph PREP ["Application Prep"]
+        M --> N["Domain Detection\n[DET] Keyword match"]
+        N --> O["Bullet Selection\n[DET] Tag filter\nfrom experience_bank.md"]
+        O --> P["Profile Summary\n[LLM — Haiku Batch]\n~$0.002/app"]
+        P --> Q["Cover Letter\n[LLM — Sonnet Batch]\n~$0.05–0.10/app"]
+        Q --> R["Validation V1–V23\n[DET] Blocks on FAIL"]
+        R --> S["PDF Render\n[DET] reportlab"]
+    end
+
+    S --> T["outputs/ready/\nCV.pdf + CoverLetter.pdf"]
+    T --> U["👤 You: Apply via ATS form"]
+    U --> V["Email Check\n[LLM — Haiku]\n~$0.001/email"]
+    V --> W["Status Update\n[DET] job_tracker.json → Sheet"]
 ```
 
 ## Quick Start
@@ -47,51 +70,49 @@ cd Claude-Workflow-Automation-public
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-# 2. Configure
-cp .env.example .env          # fill in your API keys
-# Fill data/content/candidate_profile.json (see CONFIGURE_CHECKLIST.md)
-# Write data/content/experience_bank.md (your resume bullet content)
+# 2. Run setup wizard (handles Steps 1–4 interactively)
+python3 scripts/setup_wizard.py
+# Then complete Steps 5–13 in GUIDE.md §4
 
-# 3. Integrity check
+# 3. Integrity check (all checks must pass before first run)
 python3 scripts/check_workflow.py
 
-# 4. Dry run (no API calls made)
+# 4. Dry run — no API calls, shows search config + cost estimate
 python3 scripts/run_scout.py --dry-run
 
-# 5. First scout run
+# 5. First live scout
 python3 scripts/run_scout.py --market uk --yes
 python3 scripts/write_tracker.py
+python3 scripts/scout_analysis.py
 python3 scripts/sheets_sync.py push --tabs apps,archive
 
-# 6. Review jobs in Google Sheet, approve + add ATS URL, then pull
+# 6. Review in Sheet → approve + paste ATS URL → pull → prep
 python3 scripts/sheets_sync.py pull --tabs apps,archive
 # In Claude Code: "run application prep"
 ```
+
+Full setup guide: **GUIDE.md §4** (30 min minimum). For daily commands: **TOOL_COMMANDS.md**.
 
 ## Documentation
 
 | File | Purpose |
 |------|---------|
-| CONFIGURE_CHECKLIST.md | Master setup checklist — start here |
-| SETUP.md | Prerequisites and step-by-step setup guide |
-| CLAUDE_PROJECT_SETUP.md | Claude Code install, MCP config, hooks wiring |
-| TOOL_COMMANDS.md | All daily-use commands for every pipeline stage |
-| COST_GUIDE.md | Subscription and API cost breakdown with estimates |
-| CONFIGURATION.md | Full parameter reference for every config file |
-| ANTI_HALLUCINATION.md | Experience bank philosophy and validation checks |
-| templates/google_sheets_setup.md | Google Sheets service account setup |
+| **GUIDE.md** | Complete reference: architecture, costs, setup, first run, customisation |
+| **TOOL_COMMANDS.md** | All daily-use commands for every pipeline stage |
+| **CONFIGURATION.md** | Full parameter reference for every config file |
+| `templates/google_sheets_setup.md` | Google Sheets service account setup guide |
 
 ## Cost Summary
 
 | Component | Cost |
 |-----------|------|
-| Claude Code Pro | $20/month (required subscription) |
+| Claude Code Pro | $20/month (required — covers interactive sessions, not API calls) |
 | Apify | $0/month (includes $5 free credit — covers ~6 full international runs/month) |
-| Claude API | ~$0.10–$0.25 per scout run, ~$0.05–$0.12 per application prep |
+| Claude API | ~$0.05–$0.15 per scout run · ~$0.05–$0.12 per application prep |
 | Google Sheets API | Free |
 | IMAP email tracking | Free (Yahoo / Gmail / Outlook) |
 
-See COST_GUIDE.md for a full breakdown and practical monthly estimates at different usage levels.
+Full cost breakdown with monthly estimates at different usage levels: **GUIDE.md §3**.
 
 ## Supported Markets
 
@@ -110,14 +131,14 @@ and visa framing in generated cover letters. See CONFIGURATION.md for market set
 
 ## What you need to configure
 
-1. Fill `.env` with your API keys (see .env.example for instructions per variable)
+1. Fill `.env` with your API keys (see `.env.example`)
 2. Fill `data/content/candidate_profile.json` with your personal and professional details
 3. Write `data/content/experience_bank.md` with your work history and bullet points
-4. Add your LinkedIn search URLs to `scripts/run_scout.py` (SEARCHES_APIFY block)
-5. Set your target roles, salary threshold, and location tiers in `CLAUDE.md §3`
+4. Add your LinkedIn search URLs to `scripts/run_scout.py` (`SEARCHES_APIFY` block)
+5. Set your salary thresholds in `scripts/common.py` (`SALARY_THRESHOLDS`)
 6. Set your scoring rubric in `docs/fit-scoring-rubric.md`
 
-Full step-by-step instructions: CONFIGURE_CHECKLIST.md
+Full step-by-step instructions: **GUIDE.md §4**
 
 ## Prerequisites
 

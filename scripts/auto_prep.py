@@ -81,7 +81,36 @@ _RIGHT_TO_WORK_MARKETS = set(_PROFILE.get("has_right_to_work", {}).get("markets"
 # Edit candidate_profile.json → domains to add/remove domains and keywords.
 # ═══════════════════════════════════════════════════════════════════════════════
 
-DOMAIN_KEYWORDS: dict[str, list[str]] = {
+def _load_domain_keywords_from_profile(profile: dict) -> dict[str, list[str]]:
+    """Load domain keywords from candidate_profile.json → domains.
+    Supports two formats:
+      flat:   {"domain_name": ["kw1", "kw2"], ...}
+      nested: {"domain_name": {"label": "...", "keywords": ["kw1", ...]}, ...}
+    Returns empty dict if not configured (triggers fallback to defaults).
+    """
+    raw = {k: v for k, v in profile.get("domains", {}).items() if not k.startswith("_")}
+    result: dict[str, list[str]] = {}
+    for name, val in raw.items():
+        if isinstance(val, list):
+            if val:
+                result[name] = val
+        elif isinstance(val, dict):
+            kws = val.get("keywords", [])
+            if kws and not all(k.startswith("keyword") for k in kws):
+                result[name] = kws
+    return result
+
+
+_PROFILE_DOMAIN_KEYWORDS = _load_domain_keywords_from_profile(_PROFILE)
+
+# DOMAIN_KEYWORDS drives the domain detection in detect_domain().
+# Priority: candidate_profile.json → domains (your custom domains + keywords).
+# Fallback: built-in analytics/data domains (used when profile domains are not yet configured).
+# To use your own domains: fill candidate_profile.json → domains with your keywords.
+DOMAIN_KEYWORDS: dict[str, list[str]] = _PROFILE_DOMAIN_KEYWORDS if _PROFILE_DOMAIN_KEYWORDS else {
+    # ── Default fallback: analytics/data profession domains ───────────────────
+    # These are used when candidate_profile.json → domains is not yet populated.
+    # Replace by filling your domains in candidate_profile.json.
     "product": [
         "product analytics", "growth analytics", "experimentation", "a/b test",
         "ecommerce", "conversion", "saas", "funnel", "activation", "marketplace",
@@ -119,6 +148,7 @@ DOMAIN_KEYWORDS: dict[str, list[str]] = {
         "analytics transformation", "ai transformation", "agentic ai",
         "generative ai", "digital transformation", "ai business analyst",
     ],
+    "general": [],
 }
 
 LEADERSHIP_KEYWORDS: list[str] = [
