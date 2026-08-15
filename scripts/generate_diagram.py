@@ -79,9 +79,9 @@ def _arrow_right(ax, x_from, x_to, y, label="", color="#C0392B"):
                                 lw=1.7, mutation_scale=15),
                 zorder=2)
     if label:
-        ax.text((x_from + x_to)/2, y + 0.15, label,
+        ax.text((x_from + x_to)/2, y + 0.22, label,
                 ha="center", va="bottom", fontsize=8.2,
-                color=color, style="italic", zorder=5, clip_on=False)
+                color=color, style="italic", zorder=7, clip_on=False)
 
 
 def _group(ax, y_bot, height, title, fill, border):
@@ -91,10 +91,10 @@ def _group(ax, y_bot, height, title, fill, border):
         linewidth=1.8, edgecolor=border, facecolor=fill,
         zorder=1, alpha=0.50, clip_on=False,
     ))
-    # centred title at top of group box
-    ax.text(GX + GW/2, y_bot + height - 0.30, title,
-            ha="center", va="top", fontsize=9.5,
-            color=border, fontweight="bold", zorder=2, clip_on=False)
+    # Title sits ABOVE the group box border so it never collides with interior nodes
+    ax.text(GX + GW/2, y_bot + height + 0.12, title,
+            ha="center", va="bottom", fontsize=9.5,
+            color=border, fontweight="bold", zorder=5, clip_on=False)
 
 
 def _legend(ax, x, y, color, label):
@@ -133,8 +133,9 @@ def draw() -> Path:
           INPUT)
 
     # ─────────────────── SCOUT GROUP ──────────────────────────────────────────
-    # Lay out nodes top-to-bottom; record y positions
-    y = y_input - STEP
+    # Extra gap before first scout node creates room for the group title above the box
+    SCOUT_TITLE_GAP = 0.70
+    y = y_input - STEP - SCOUT_TITLE_GAP
 
     _arrow_down(ax, CX, y_input - HH, y + HH)
     _node(ax, CX, y, BW, BH,
@@ -186,7 +187,7 @@ def draw() -> Path:
     SCORE_HH = SCORE_H / 2
 
     # Draw scout group behind all its nodes
-    scout_top    = y_input - HH - 0.30
+    scout_top    = y_input - HH - 0.20   # just below input node bottom
     scout_bottom = y_score - SCORE_HH - 0.35
     _group(ax, scout_bottom, scout_top - scout_bottom,
            "Job Discovery — daily or on demand", GROUP_SCOUT, DET)
@@ -232,8 +233,10 @@ def draw() -> Path:
          "[DET]  reportlab A4  ·  [YourName]_CV.pdf + CoverLetter.pdf  ·  Free", DET),
     ]
 
-    prep_top    = y_pull - HH - 0.30
-    prep_bottom = prep_top - (len(prep_nodes) * STEP + 0.55)
+    # Pre-calculate y_pdf so prep_bottom is explicit (avoids straddle on boundary)
+    y_pdf_calc  = y_pull - len(prep_nodes) * STEP
+    prep_top    = y_pull - HH - 0.20       # just below pull node bottom
+    prep_bottom = y_pdf_calc - HH - 0.50   # explicit 0.50 gap below last prep node
     _group(ax, prep_bottom, prep_top - prep_bottom,
            "Application Prep — per approved job", GROUP_PREP, "#C47A1A")
 
@@ -244,10 +247,11 @@ def draw() -> Path:
         _node(ax, CX, y, BW, BH, label, sub, color)
         y_prev = y
         y -= STEP
-    y_pdf = y_prev   # last prep node
+    y_pdf = y_prev   # last prep node (equals y_pdf_calc)
 
     # ─────────────────── OUTPUTS → APPLY → EMAIL → STATUS ────────────────────
-    y = y_pdf - STEP
+    # Extra gap so outputs/ready/ sits clearly below the Application Prep group
+    y = y_pdf - STEP - 0.45
     _arrow_down(ax, CX, y_pdf - HH, y + HH)
     _node(ax, CX, y, BW, BH,
           "outputs/ready/  ·  CV.pdf + CoverLetter.pdf",
@@ -275,8 +279,8 @@ def draw() -> Path:
     _arrow_down(ax, CX, y_email - HH, y + HH)
     _node(ax, CX, y, BW, BH,
           "Status Update",
-          "[DET]  job_tracker.json → Sheet  ·  Applied → Under Review → Offer / Rejected",
-          DET, lfs=9.5, sfs=8.2)
+          "[DET]  job_tracker.json → Sheet  ·  Applied → Offer / Rejected",
+          DET, lfs=9.5, sfs=7.8)
     y_status = y
 
     # ─────────────────── LEGEND ───────────────────────────────────────────────
