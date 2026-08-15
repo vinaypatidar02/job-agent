@@ -65,8 +65,8 @@ flowchart TD
 
 ```bash
 # 1. Clone and install
-git clone https://github.com/YOUR_USERNAME/Claude-Workflow-Automation-public.git
-cd Claude-Workflow-Automation-public
+git clone https://github.com/YOUR_USERNAME/job-agent.git
+cd job-agent
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
@@ -116,10 +116,39 @@ Full cost breakdown with monthly estimates at different usage levels: **GUIDE.md
 
 ## Supported Markets
 
-UK · Netherlands · Germany · Denmark · Ireland · Sweden · UAE
+7 markets pre-configured out of the box — **and you can add any market in minutes:**
 
-Each market has its own LinkedIn search configuration, city tier scoring, salary threshold,
-and visa framing in generated cover letters. See CONFIGURATION.md for market setup instructions.
+| Market | Visa type |
+|--------|-----------|
+| UK | Skilled Worker Visa |
+| Netherlands | Kennismigrant |
+| Germany | EU Blue Card |
+| Denmark | Pay Limit Scheme |
+| Ireland | Critical Skills Employment Permit |
+| Sweden | Arbetstillstånd |
+| UAE | Employment Visa |
+
+**Adding a new market** is 5 config edits: add a geoId + LinkedIn URL, set a salary threshold,
+define city tier scoring, add a visa address, update the scoring rubric. No code change required
+beyond those config files. See GUIDE.md §6g.
+
+## Extend and Customise via Claude Interactions
+
+Once set up, you can extend the pipeline through natural language in your Claude Code session — no
+script editing required for most customisations:
+
+| What you want | Say in Claude Code |
+|---------------|-------------------|
+| Add a new target market | "add [country] as a new market with salary threshold [X]" |
+| Score a specific job | "score this job: [paste JD]" |
+| Draft a cover letter | "draft cover letter for app_001" |
+| Add a validation rule | "add a validation check that blocks [condition]" |
+| Draft a referral message | "draft referral message for app_001 — contact: [name], [LinkedIn], [relationship]" |
+| Analyse scout results | "run scout analysis and show me the keyword overlap" |
+| Tune scoring thresholds | "adjust shortlist threshold to 80 and explain the tradeoff" |
+
+Claude reads `CLAUDE.md` at session start, which loads your full pipeline context — preferences,
+rubric, market config, and candidate profile — so every interaction is aware of your setup.
 
 ## Design Principles
 
@@ -128,6 +157,8 @@ and visa framing in generated cover letters. See CONFIGURATION.md for market set
 - **Config-driven**: every personal and profession-specific value lives in candidate_profile.json
 - **Validation layer**: 20+ pre-render checks block incorrect content before it reaches any PDF
 - **Apify 24h cache**: prevents re-spending on same-day re-runs
+- **Deterministic + LLM split**: free Python rules filter ~40-60% of jobs before any API call
+- **Extensible**: add markets, validation checks, and scoring rules without touching core scripts
 
 ## What you need to configure
 
@@ -138,7 +169,7 @@ and visa framing in generated cover letters. See CONFIGURATION.md for market set
 5. Set your salary thresholds in `scripts/common.py` (`SALARY_THRESHOLDS`)
 6. Set your scoring rubric in `docs/fit-scoring-rubric.md`
 
-Full step-by-step instructions: **GUIDE.md §4**
+Full step-by-step instructions: **GUIDE.md §4** · Customisation options: **GUIDE.md §6**
 
 ## Prerequisites
 
