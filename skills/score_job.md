@@ -113,7 +113,7 @@
 #
 # If is_remote_only=true OR work_mode="Remote":
 #   - location_score = 10 for ALL job locations (remote is timezone-agnostic;
-#     India aligns with UK/CET business hours)
+#     your location aligns with target market business hours)
 #
 # role_type = compute from is_contract × is_remote_only:
 #   is_contract=true  + is_remote_only=true   → "contract_remote"

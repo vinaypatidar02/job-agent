@@ -404,10 +404,10 @@ def check_v10_investment_domain(resume: dict, cover: dict, jd_text: str):
     else:
         _fail(
             "V10 Investment domain MF check",
-            "Investment/finance domain JD detected but Mutual Fund experience missing from "
+            "Investment/finance domain JD detected but personal investment experience missing from "
             "resume summary and cover letter.",
-            "STEP 3: add closing sentence to summary about 7+ years personal Mutual Fund "
-            "investment experience. STEP 5: add 1-2 sentences in Para 3 about domain fluency."
+            "STEP 3: add a closing sentence to summary about your personal investment experience. "
+            "STEP 5: add 1-2 sentences in Para 3 about domain fluency matching the JD's investment focus."
         )
 
 
@@ -415,14 +415,12 @@ def check_v10_investment_domain(resume: dict, cover: dict, jd_text: str):
 # Bank ratios derived from strict impact-only classification of experience_bank.md:
 #   Only %, outcome deltas (from X to Y), and accuracy figures count.
 #   Team headcounts, stage counts, component counts = descriptors, NOT impact.
-ROLE_BANK_RATIOS = {
-    "independent":       (0, 3),   # skip — no impact bullets in bank
-    "flipkart":          (4, 10),  # 40% — Extrasaver 95%/90% reclassified as operational descriptor
-    "beepkart":          (4, 7),   # 57%
-    "dehaat":            (1, 6),   # 17% — only the "30% reduction" bullet qualifies
-    "quinbay":           (0, 6),   # skip — bank has impact bullets but they're search/product framing
-    "coviam":            (1, 4),   # 25% — "85% accuracy" XGBoost bullet; bank has 4
-}
+#
+# POPULATE THIS for your own employers after writing experience_bank.md.
+# Format: "company_substr_lowercase": (impact_bullet_count, total_bullets_in_bank)
+# Example: "acme_corp": (3, 8)   → 38% impact ratio → enforces ≥1 impact bullet per role
+# Leave empty ({}) to skip V11 for all roles.
+ROLE_BANK_RATIOS: dict[str, tuple[int, int]] = {}
 IMPACT_RE = re.compile(r'\d+%|from \d+ to \d+|\d+x\b', re.IGNORECASE)
 
 
@@ -920,19 +918,12 @@ def check_v23_leading_verbs(resume: dict):
 # These are the exact [team-lead]-tagged bullet openings from experience_bank.md.
 # Pass 6 in auto_prep.py guarantees bullets[0] is the team-lead bullet.
 # If it isn't, Pass 6 failed to fire — catch it here before rendering.
-_TEAM_LEAD_BULLETS = {
-    "flipkart": (
-        "led and mentored a cross-functional analytics team",  # original
-        "led a cross-functional analytics team",               # SHORTEN result
-    ),
-    "beepkart": (
-        "led and coached a team of 5 analysts",                # original
-        "led and coached 5 analysts",                          # SHORTEN result
-    ),
-    "dehaat": (
-        "led a team of 3 analysts",                            # both forms identical
-    ),
-}
+#
+# POPULATE THIS from your own experience_bank.md after tagging bullets [team-lead].
+# Format: "company_substr_lowercase": ("opening phrase variant 1", "variant 2 after SHORTEN")
+# Example: "acme_corp": ("led and mentored a team of", "led a team of")
+# Leave empty ({}) to skip V_LEAD enforcement.
+_TEAM_LEAD_BULLETS: dict[str, tuple] = {}
 
 
 def check_v_lead(resume: dict):
@@ -970,21 +961,20 @@ def check_v_lead(resume: dict):
         _pass("V_LEAD Leadership bullet order", "team-lead bullet is bullets[0] in all leadership roles")
 
 
-# ── V_ROLES ��� work_history role count + exact bullet counts (Hard Fail) ──��───
-_EXPECTED_ROLES = 6
+# ── V_ROLES — work_history role count + exact bullet counts (Hard Fail) ────────
+# Set to the number of roles in your work_history, or None to skip the count check.
+_EXPECTED_ROLES: int | None = None
 
 # Exact bullet counts per role — keyed by (company_substr, role_substr_or_None), both lowercased.
 # auto_prep.py max_bullets defines these; the LLM must not add or remove bullets.
 # role_substr disambiguates same-company roles (e.g. two different roles at the same employer).
-# "senior data analyst" is checked before "data analyst" so it matches first on Senior roles.
-_EXACT_BULLET_COUNTS = [
-    ("independent",  None,                   3),
-    ("flipkart",     None,                   6),
-    ("beepkart",     None,                   5),
-    ("dehaat",       None,                   5),
-    ("quinbay",      "senior data analyst",  4),
-    ("quinbay",      "data analyst",         3),
-]
+# List longer role substrings before shorter ones so they match first (e.g. "senior data analyst"
+# before "data analyst").
+#
+# POPULATE THIS from your own max_bullets settings in auto_prep.py after your first prep run.
+# Example: ("acme_corp", None, 5) → expects exactly 5 bullets for any Acme Corp role
+# Leave empty ([]) to skip V_ROLES bullet count enforcement.
+_EXACT_BULLET_COUNTS: list[tuple] = []
 
 
 def _expected_bullets(company: str, role: str):
@@ -1057,10 +1047,16 @@ def check_v24_role_type_framing(resume: dict, cover: dict):
 
 
 def check_vroles_count(resume: dict):
-    """Enforce: exactly 6 roles, each with the exact bullet count defined in ROLE_METADATA."""
+    """Enforce exact role count + bullet counts. Skipped if _EXPECTED_ROLES is None and
+    _EXACT_BULLET_COUNTS is empty (default for fresh installs — populate after first prep run)."""
     wh = resume.get("work_history", [])
     n = len(wh)
-    if n != _EXPECTED_ROLES:
+    if _EXPECTED_ROLES is None and not _EXACT_BULLET_COUNTS:
+        _pass("V_ROLES Work history count + bullet counts",
+              "skipped — _EXPECTED_ROLES and _EXACT_BULLET_COUNTS not configured "
+              "(populate in validate_prep.py after your first prep run)")
+        return
+    if _EXPECTED_ROLES is not None and n != _EXPECTED_ROLES:
         _fail(
             "V_ROLES Work history count",
             f"work_history has {n} roles — expected {_EXPECTED_ROLES}. "

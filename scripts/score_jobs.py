@@ -2078,7 +2078,7 @@ as employee", or is explicitly inside-IR35 with employing firm as the legal empl
 → set visa_sponsorship_status="Rejected", visa_score=-10.
 
 LOCATION FOR REMOTE: If is_remote_only=true OR work_mode="Remote", score location=10
-regardless of the job's city (remote = timezone-agnostic; India aligns with UK/CET hours).
+regardless of the job's city (remote = timezone-agnostic; candidate timezone aligns with target market hours).
 
 DAY RATES: If salary is stated as a day rate (e.g. "£450/day", "£400 per day"), annualise:
 rate × 220 working days. Compare against the 80% market threshold.

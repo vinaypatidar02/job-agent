@@ -7,7 +7,7 @@
 # phrasing or prior preferences.
 #
 # BEFORE GOING LIVE:
-#   1. Complete every step in CONFIGURE_CHECKLIST.md
+#   1. Complete every step in GUIDE.md §4
 #   2. Run: python3 scripts/check_workflow.py
 #   3. Dry run: python3 scripts/run_scout.py --dry-run
 #   4. Review the first scout result manually before applying to any job

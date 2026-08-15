@@ -273,10 +273,10 @@
 #
 #   [CONTEXT — 1 sentence: role + why this specific person.]
 #
-#   [VISA/CHALLENGE — 2–3 sentences: based in India, need sponsorship,
-#    honest reason for reaching out to people in the business rather than
-#    standard application route — international candidates tend to get
-#    filtered by HR before the profile is reviewed.]
+#   [VISA/CHALLENGE — 2–3 sentences: based in [YOUR_CURRENT_COUNTRY], need
+#    sponsorship, honest reason for reaching out to people in the business
+#    rather than standard application route — international candidates tend
+#    to get filtered by HR before the profile is reviewed.]
 #
 #   [FIT — 2–3 sentences: "having gone through the JD carefully, I genuinely
 #    believe I'm a strong fit" + most relevant experience + one metric/signal
@@ -372,8 +372,8 @@
 #     [years_of_experience]+ years in [YOUR_DOMAIN] — [YOUR_ROLE_1] at [Company A] ([YOUR_DOMAIN_1]) and [YOUR_ROLE_2] at [Company B] ([YOUR_DOMAIN_2]). Targeting [country] under
 #     [visa], ready to relocate. Would love to be put forward."
 #   Template — Senior target (~272 chars):
-#     "Hi [Name], I came across the [Role] you're covering — a strong match. 8+ years in analytics —
-#     [Company A] (product and growth analytics) and [Company B] (commercial analytics, dynamic pricing).
+#     "Hi [Name], I came across the [Role] you're covering — a strong match. [years_of_experience]+
+#     years in [YOUR_DOMAIN] — [Company A] ([YOUR_DOMAIN_1]) and [Company B] ([YOUR_DOMAIN_2]).
 #     Targeting [country] under [visa], ready to relocate. Would love to be put forward."
 #
 # DM structure (sent after connection accepted):
@@ -452,7 +452,7 @@
 #   [HOOK — 1 sentence: came across profile exploring [YOUR_DOMAIN] leadership roles in [country].
 #    Do NOT reference a specific role — this is general market outreach.]
 #
-#   [FIT SIGNAL — 2 sentences: 8+ years, employers, domains. Tight.]
+#   [FIT SIGNAL — 2 sentences: [years_of_experience]+ years, employers, domains. Tight.]
 #
 #   [RELOCATION:
 #    "Based in [YOUR_CITY] — actively targeting [country] under [visa],
@@ -816,11 +816,11 @@
 - **Option A credential format (mandatory pre-flight — check target role tier first):**
   Role-adaptive credentials in all DMs and in HM/recruiter connection notes:
   - **Lead/Manager target role** → title-forward format:
-    "[years_of_experience]+ years in [YOUR_DOMAIN] — [YOUR_ROLE_1] at [Company A] (product and growth analytics) and
-     [YOUR_ROLE_2] at [Company B] (commercial analytics, dynamic pricing)"
+    "[years_of_experience]+ years in [YOUR_DOMAIN] — [YOUR_ROLE_1] at [Company A] ([YOUR_DOMAIN_1]) and
+     [YOUR_ROLE_2] at [Company B] ([YOUR_DOMAIN_2])"
   - **Senior target role** → employer-domain format:
-    "[years_of_experience]+ years in [YOUR_DOMAIN] — [Company A] (product and growth analytics) and [Company B]
-     (commercial analytics, dynamic pricing)"
+    "[years_of_experience]+ years in [YOUR_DOMAIN] — [Company A] ([YOUR_DOMAIN_1]) and [Company B]
+     ([YOUR_DOMAIN_2])"
   NEVER use "8+ years in [YOUR_DOMAIN] leadership" as a blanket phrase — the first ~3.5 years were
   IC/Senior roles at earlier employers. The title-forward format (Lead/Manager version)
   signals seniority through actual titles, not a leadership claim over the full career.
@@ -839,8 +839,8 @@
   - Rule: [YOUR_DOMAIN] → Option 2 | HR/TA → Option HR/TA | other internal → Option 1 | external recruiter → type-specific close.
 - **Never map the contact's exact career journey** — "BCG Bangalore, HEC Paris, now LEGO" reads
   like profile stalking. Reference the broad transition generically: "noticed you made the move
-  from India to Denmark." Country-to-country ("India to Denmark"), not country-to-city
-  ("India to Copenhagen") — the asymmetry looks odd.
+  from [Your Country] to [Target Country]." Country-to-country, not country-to-city
+  ("[Country A] to [City B]") — the asymmetry looks odd.
 - **"Similar transition" > "exactly the path I'm working towards"** — the latter implies a single
   destination, which isn't true when targeting multiple European markets.
 - **Hometown personal link** — if contact studied at a university in your city, mention it
@@ -852,13 +852,13 @@
   - `is_relevant_contact = yes` (contact owns this hire): use the **full 300 chars** with credentials.
     Structure: role → brief fit signal (2 employers + domains + market/visa) → talent-team closing hook.
     Template — Lead/Manager target (~293 chars):
-    "Hi [Name], I came across the [Role] at [Company] — a strong match. 8+ years in analytics —
-    [YOUR_ROLE_1] at [Company A] (product and growth analytics) and [YOUR_ROLE_2] at [Company B]
-    (commercial analytics, dynamic pricing); targeting [country] under [visa].
+    "Hi [Name], I came across the [Role] at [Company] — a strong match. [years_of_experience]+ years
+    in [YOUR_DOMAIN] — [YOUR_ROLE_1] at [Company A] ([domain_A]) and [YOUR_ROLE_2] at [Company B]
+    ([domain_B]); targeting [country] under [visa].
     Always good to know someone on the talent team before applying."
   Template — Senior target (~275 chars):
-    "Hi [Name], I came across the [Role] at [Company] — a strong match. 8+ years in analytics —
-    [Company A] (product and growth analytics) and [Company B] (commercial analytics, dynamic pricing);
+    "Hi [Name], I came across the [Role] at [Company] — a strong match. [years_of_experience]+ years
+    in [YOUR_DOMAIN] — [Company A] ([domain_A]) and [Company B] ([domain_B]);
     targeting [country] under [visa]. Always good to know someone on the talent team before applying."
   - `is_relevant_contact = no / unknown`: use **soft intent only**, ≤220 chars, NO credentials.
     Template (~151 chars): "Hi [Name], I came across the [Role] at [Company] and wanted to connect
@@ -869,17 +869,17 @@
 
 - **External recruiter contacts** — always full 300 chars regardless of is_relevant_contact:
   - Type C, Lead/Manager target (~299 chars): "Hi [Name], I came across the [Role] you're covering —
-    a strong match for my background. [years_of_experience]+ years in [YOUR_DOMAIN] — [YOUR_ROLE_1] at [Company A] (product and
-    growth analytics) and [YOUR_ROLE_2] at [Company B] (commercial analytics, dynamic pricing).
+    a strong match for my background. [years_of_experience]+ years in [YOUR_DOMAIN] — [YOUR_ROLE_1] at [Company A]
+    ([YOUR_DOMAIN_1]) and [YOUR_ROLE_2] at [Company B] ([YOUR_DOMAIN_2]).
     Targeting [country] under [visa], ready to relocate. Would love to be put forward."
   - Type C, Senior target (~272 chars): "Hi [Name], I came across the [Role] you're covering —
-    a strong match. [years_of_experience]+ years in [YOUR_DOMAIN] — [Company A] (product and growth analytics) and [Company B]
-    (commercial analytics, dynamic pricing). Targeting [country] under [visa], ready to relocate.
+    a strong match. [years_of_experience]+ years in [YOUR_DOMAIN] — [Company A] ([YOUR_DOMAIN_1]) and
+    [Company B] ([YOUR_DOMAIN_2]). Targeting [country] under [visa], ready to relocate.
     Would love to be put forward."
   - Type C-General (~280 chars, always Lead/Manager): "Hi [Name], I came across your profile
-    exploring [YOUR_DOMAIN] leadership roles in [country]. [years_of_experience]+ years in [YOUR_DOMAIN] — [YOUR_ROLE_1] at [Company A]
-    and [YOUR_ROLE_2] at [Company B]; product, growth, and commercial analytics. Targeting
-    [country] under [visa]. Keen to be on your radar for the right opening."
+    exploring [YOUR_DOMAIN] leadership roles in [country]. [years_of_experience]+ years in [YOUR_DOMAIN] —
+    [YOUR_ROLE_1] at [Company A] and [YOUR_ROLE_2] at [Company B]; [YOUR_DOMAIN_1] and [YOUR_DOMAIN_2].
+    Targeting [country] under [visa]. Keen to be on your radar for the right opening."
   Note: NEVER use Option 1 ("inside a company") — recruiter is at an agency, not the hiring company.
         NEVER use Option 2 ("same space") — recruiter does not do analytics.
         Use "Would love to be put forward" (Type C) or "Keen to be on your radar" (C-General).
@@ -1149,8 +1149,8 @@ A single "can't help" reply does NOT kill the application — other contacts may
   Opener: "With that in mind, I was hoping you might be open to..." — flows naturally from the
   acknowledged constraint. Canonical ask ("Would you be open to...") is for cold/direct first asks.
 - **Insider intel question**: adding a question alongside the ask ("curious whether the role would
-  be open to someone making the move from India to Denmark") gives the contact two things to
-  respond to — easier to reply even if unsure about the referral. Use country-to-country
+  be open to someone making the move from [Your Country] to [Target Country]") gives the contact
+  two things to respond to — easier to reply even if unsure about the referral. Use country-to-country
   framing, not "international candidate."
 - **Positive response follow-up**: keep it very short (1–2 sentences). Two confirmed patterns:
   1. Humble qualifier: "of course only if you find it worth your time" — releases obligation.
@@ -1163,11 +1163,11 @@ A single "can't help" reply does NOT kill the application — other contacts may
 <!-- Reference samples for all 8 contact scenarios — exact confirmed text from session review. -->
 <!-- Read in STEP 4b — compare every draft against the matching scenario sample. -->
 <!-- Placeholders: [Name] [Company] [Role] [their title] [country] [visa] -->
-<!-- Option A credential in DMs — ALWAYS includes "team of 5" for [Company B]:                     -->
-<!--   Lead/Manager: "[years_of_experience]+ years in [YOUR_DOMAIN] — [YOUR_ROLE_1] at [Company A] (product and growth analytics) -->
-<!--                  and [YOUR_ROLE_2] at [Company B] (commercial analytics, dynamic pricing, team of 5)" -->
-<!--   Senior:       "[years_of_experience]+ years in [YOUR_DOMAIN] — [Company A] (product and growth analytics) and       -->
-<!--                  [Company B] (commercial analytics, dynamic pricing)"  ← no "team of N"                             -->
+<!-- Option A credential in DMs — ALWAYS includes team size for [Company B] where applicable:     -->
+<!--   Lead/Manager: "[years_of_experience]+ years in [YOUR_DOMAIN] — [YOUR_ROLE_1] at [Company A] ([YOUR_DOMAIN_1]) -->
+<!--                  and [YOUR_ROLE_2] at [Company B] ([YOUR_DOMAIN_2], team of N)" -->
+<!--   Senior:       "[years_of_experience]+ years in [YOUR_DOMAIN] — [Company A] ([YOUR_DOMAIN_1]) and       -->
+<!--                  [Company B] ([YOUR_DOMAIN_2])"  ← no "team of N"                                       -->
 <!-- Connection notes use abbreviated em-dash grouping (no "team of N") to save chars.          -->
 <!-- JD-FIT = mandatory instruction in Scenarios 3 and 4 only — see those samples.              -->
 <!-- AE market (all scenarios): omit fair chance hook — UAE employment visa is standard process. -->

@@ -207,8 +207,9 @@
 #      Remote.com). The EOR entity is the legal employer in my country of residence,
 #      so no work permit or right-to-work in [country] is required from your side."
 #   - Start date: "Immediately, or within two weeks."
-#   - Work arrangement: "Fully remote from India, with 6+ hours daily overlap with
-#     UK/CET business hours — I can flex to align with your team's core hours."
+#   - Work arrangement: "Fully remote from [YOUR_CURRENT_COUNTRY], with adequate
+#     daily overlap with [TARGET_TIMEZONE] business hours — I can flex to align with
+#     your team's core hours."
 #   - NEVER mention visa sponsorship, relocation, or right-to-work as the company's obligation.
 #
 # When role_type = "permanent_hybrid" | "permanent_remote" | "contract_hybrid":
