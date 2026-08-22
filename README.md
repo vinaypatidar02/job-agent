@@ -10,6 +10,9 @@ A production-grade, fully autonomous job search pipeline built on Claude Code, A
 the Anthropic API. Originally built as a personal tool, open-sourced for any job seeker in
 any profession.
 
+> **License**: Personal use only — commercial use, SaaS deployment, and sublicensing are
+> prohibited. See [License](#license) below.
+
 ## What it does
 
 - Scrapes LinkedIn jobs daily via Apify across 7 markets (UK, NL, DE, DK, IE, SE, UAE)
